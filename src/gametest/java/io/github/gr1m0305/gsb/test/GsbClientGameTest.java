@@ -48,6 +48,8 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			minecraft.resizeGui();
 			minecraft.options.getSoundSourceOptionInstance(SoundSource.MASTER).set(0.0);
 			minecraft.getSoundManager().addListener((sound, soundSet, range) -> sounds.add(sound.getIdentifier().toString()));
+			// Start from the settings of a fresh install, whatever an earlier run left in the config file.
+			GrimsSkyblock.get().config().get().farming = new FarmingCategory();
 			GrimsSkyblock.get().farmingTracker().reset();
 		});
 
@@ -62,7 +64,18 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			// The inventory is not watched for a few seconds after joining a world.
 			context.waitTicks(120);
 			check(SkyblockState.onGarden(), "the Area line of the tab list puts the player on the Garden");
-			check(tracker().isVisible() && fortune().isVisible(), "both elements are shown on the Garden");
+
+			// Every feature is off until it is turned on in the menu.
+			check(!tracker().isEnabled() && !fortune().isEnabled() && !alert().isEnabled(), "all features are off by default");
+			check(!tracker().isVisible() && !fortune().isVisible(), "features that are off show nothing on the Garden");
+			context.runOnClient(minecraft -> {
+				FarmingCategory farming = GrimsSkyblock.get().config().get().farming;
+				farming.profitTracker.enabled = true;
+				farming.fortuneDisplay.enabled = true;
+				farming.pestCooldown.enabled = true;
+			});
+			context.waitTicks(10);
+			check(tracker().isVisible() && fortune().isVisible(), "both elements are shown on the Garden once they are turned on");
 			check(lines(context, fortune()).equals(List.of("Farming Fortune: ☘1724")), "fortune line was " + lines(context, fortune()));
 
 			// Crops that went into the sacks.

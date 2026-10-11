@@ -32,7 +32,7 @@ public class FarmingCategory {
 		@ConfigOption(name = "Enabled", desc = "Tracks the crops you farm, the drops of vacuumed pests and what you sell to NPCs on the Garden.\n"
 				+ "§eNeeds Sack Notifications turned on in the SkyBlock settings.")
 		@ConfigEditorBoolean
-		public boolean enabled = true;
+		public boolean enabled = false;
 
 		@Expose
 		@ConfigOption(name = "Price Source", desc = "The price each item is valued at. Items without that kind of price use the other one.")
@@ -61,7 +61,7 @@ public class FarmingCategory {
 		@ConfigOption(name = "Enabled", desc = "Shows Farming Fortune plus crop fortune on the Garden.\n"
 				+ "§eReads both from the Stats widget of the tab list.")
 		@ConfigEditorBoolean
-		public boolean enabled = true;
+		public boolean enabled = false;
 
 		@Expose
 		public Position position = defaultPosition();
@@ -76,7 +76,7 @@ public class FarmingCategory {
 		@ConfigOption(name = "Enabled", desc = "Dings and shows \"Pest Cooldown\" on your screen for a second when the pest cooldown runs out.\n"
 				+ "§eReads the cooldown from the Pests widget of the tab list.")
 		@ConfigEditorBoolean
-		public boolean enabled = true;
+		public boolean enabled = false;
 
 		@ConfigOption(name = "Test Alert", desc = "Closes this menu and plays the alert once, to check how it looks and sounds.")
 		@ConfigEditorButton(buttonText = "Test")
