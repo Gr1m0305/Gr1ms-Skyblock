@@ -280,7 +280,7 @@ public final class FarmingProfitTracker {
 
 	private final class Hud extends HudElement {
 		Hud() {
-			super("Farming Profit Tracker", 10, 80);
+			super("Farming Profit Tracker", FarmingCategory.ProfitTracker::defaultPosition);
 		}
 
 		@Override

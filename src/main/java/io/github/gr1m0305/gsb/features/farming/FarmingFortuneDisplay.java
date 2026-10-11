@@ -20,7 +20,7 @@ public final class FarmingFortuneDisplay extends HudElement {
 	private List<HudLine> lines = List.of(HudLine.of(LABEL + "§cnot in tab list"));
 
 	public FarmingFortuneDisplay(Supplier<FarmingCategory.FortuneDisplay> config) {
-		super("Farming Fortune", 10, 60);
+		super("Farming Fortune", FarmingCategory.FortuneDisplay::defaultPosition);
 		this.config = config;
 	}
 

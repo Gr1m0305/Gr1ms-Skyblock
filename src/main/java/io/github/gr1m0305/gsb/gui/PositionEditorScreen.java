@@ -225,7 +225,14 @@ public class PositionEditorScreen extends Screen {
 		}
 
 		Position position = element.position();
-		position.x = (int) Math.round(Math.clamp(x, 0, Math.max(0, width - placed.placement().width())));
+		int newX = (int) Math.round(Math.clamp(x, 0, Math.max(0, width - placed.placement().width())));
+
+		// A centred element stays centred until it is moved sideways.
+		if (!position.centered || newX != Math.round(placed.placement().x())) {
+			position.centered = false;
+			position.x = newX;
+		}
+
 		position.y = (int) Math.round(Math.clamp(y, 0, Math.max(0, height - placed.placement().height())));
 	}
 
@@ -236,7 +243,10 @@ public class PositionEditorScreen extends Screen {
 
 		// A bigger element may no longer fit where it was.
 		if (placed != null) {
-			position.x = Math.round(placed.placement().x());
+			if (!position.centered) {
+				position.x = Math.round(placed.placement().x());
+			}
+
 			position.y = Math.round(placed.placement().y());
 		}
 	}

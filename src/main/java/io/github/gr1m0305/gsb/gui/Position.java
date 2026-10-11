@@ -13,6 +13,9 @@ public class Position {
 	public int y;
 	@Expose
 	public float scale = 1f;
+	/** In the horizontal middle of the screen, whatever its width. {@link #x} is not used then. */
+	@Expose
+	public boolean centered;
 
 	// Used by Gson.
 	public Position() {
@@ -21,6 +24,21 @@ public class Position {
 	public Position(int x, int y) {
 		this.x = x;
 		this.y = y;
+	}
+
+	/** A position in the horizontal middle of the screen. */
+	public static Position centered(int y, float scale) {
+		Position position = new Position(0, y);
+		position.scale = scale;
+		position.centered = true;
+		return position;
+	}
+
+	public void copyFrom(Position other) {
+		x = other.x;
+		y = other.y;
+		scale = other.scale;
+		centered = other.centered;
 	}
 
 	public void setScale(float scale) {

@@ -1,17 +1,19 @@
 package io.github.gr1m0305.gsb.gui;
 
 import java.util.List;
+import java.util.function.Supplier;
 
 /** Something a feature draws on the screen. It can be moved and resized in the GUI editor. */
 public abstract class HudElement {
 	private final String name;
-	private final int defaultX;
-	private final int defaultY;
+	private final Supplier<Position> defaultPosition;
 
-	protected HudElement(String name, int defaultX, int defaultY) {
+	/**
+	 * @param defaultPosition makes the position the element starts at and goes back to when it is reset
+	 */
+	protected HudElement(String name, Supplier<Position> defaultPosition) {
 		this.name = name;
-		this.defaultX = defaultX;
-		this.defaultY = defaultY;
+		this.defaultPosition = defaultPosition;
 	}
 
 	/** The name shown in the GUI editor. */
@@ -35,9 +37,6 @@ public abstract class HudElement {
 	}
 
 	public void resetPosition() {
-		Position position = position();
-		position.x = defaultX;
-		position.y = defaultY;
-		position.scale = 1f;
+		position().copyFrom(defaultPosition.get());
 	}
 }

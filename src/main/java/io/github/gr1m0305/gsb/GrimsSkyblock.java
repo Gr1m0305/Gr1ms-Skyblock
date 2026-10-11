@@ -9,6 +9,7 @@ import io.github.gr1m0305.gsb.data.BazaarPrices;
 import io.github.gr1m0305.gsb.data.ItemRepository;
 import io.github.gr1m0305.gsb.features.farming.FarmingFortuneDisplay;
 import io.github.gr1m0305.gsb.features.farming.FarmingProfitTracker;
+import io.github.gr1m0305.gsb.features.farming.PestCooldownAlert;
 import io.github.gr1m0305.gsb.gui.HudManager;
 import io.github.gr1m0305.gsb.skyblock.SkyblockState;
 import net.fabricmc.api.ClientModInitializer;
@@ -32,6 +33,7 @@ public class GrimsSkyblock implements ClientModInitializer {
 
 	private ConfigManager config;
 	private FarmingProfitTracker farmingTracker;
+	private PestCooldownAlert pestCooldownAlert;
 	private @Nullable Supplier<Screen> screenToOpen;
 
 	public static GrimsSkyblock get() {
@@ -53,6 +55,10 @@ public class GrimsSkyblock implements ClientModInitializer {
 		return farmingTracker;
 	}
 
+	public PestCooldownAlert pestCooldownAlert() {
+		return pestCooldownAlert;
+	}
+
 	@Override
 	public void onInitializeClient() {
 		instance = this;
@@ -69,6 +75,8 @@ public class GrimsSkyblock implements ClientModInitializer {
 
 		HudManager.register(farmingTracker.hud());
 		HudManager.register(new FarmingFortuneDisplay(() -> config.get().farming.fortuneDisplay));
+		pestCooldownAlert = new PestCooldownAlert(() -> config.get().farming.pestCooldown);
+		HudManager.register(pestCooldownAlert);
 		HudManager.init();
 
 		ClientTickEvents.END_CLIENT_TICK.register(this::onTick);
@@ -82,6 +90,7 @@ public class GrimsSkyblock implements ClientModInitializer {
 	private void onTick(Minecraft minecraft) {
 		SkyblockState.tick(minecraft);
 		farmingTracker.tick(minecraft);
+		pestCooldownAlert.tick(minecraft);
 
 		if (screenToOpen != null) {
 			Supplier<Screen> screen = screenToOpen;

@@ -15,9 +15,9 @@ import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Scoreboard;
 import org.jspecify.annotations.Nullable;
 
-/** Where on SkyBlock the player is, read from the tab list a couple of times per second. */
+/** Where on SkyBlock the player is, read from the tab list four times per second. */
 public final class SkyblockState {
-	private static final int SCAN_INTERVAL_TICKS = 10;
+	private static final int SCAN_INTERVAL_TICKS = 5;
 	private static final String AREA_PREFIX = "Area: ";
 
 	private static List<String> tabLines = List.of();

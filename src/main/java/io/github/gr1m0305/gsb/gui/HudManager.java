@@ -86,7 +86,7 @@ public final class HudManager {
 	public static Placement place(Position position, HudRenderer.Layout layout, int screenWidth, int screenHeight) {
 		float width = layout.width() * position.scale;
 		float height = layout.height() * position.scale;
-		float x = Math.clamp(position.x, 0f, Math.max(0f, screenWidth - width));
+		float x = position.centered ? Math.max(0f, (screenWidth - width) / 2f) : Math.clamp(position.x, 0f, Math.max(0f, screenWidth - width));
 		float y = Math.clamp(position.y, 0f, Math.max(0f, screenHeight - height));
 		return new Placement(x, y, width, height);
 	}

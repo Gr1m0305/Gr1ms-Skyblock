@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import com.mojang.authlib.GameProfile;
 import io.github.gr1m0305.gsb.GrimsSkyblock;
@@ -30,6 +31,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.Style;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
+import net.minecraft.sounds.SoundSource;
 
 /**
  * Runs the mod in a real client. Hypixel is imitated by putting its tab list lines, chat messages and items
@@ -38,10 +40,14 @@ import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 public class GsbClientGameTest implements FabricClientGameTest {
 	@Override
 	public void runTest(ClientGameTestContext context) {
+		// The game still tells listeners about every sound when the volume is off, so the test can stay quiet.
+		List<String> sounds = new CopyOnWriteArrayList<>();
 		context.getInput().resizeWindow(1280, 720);
 		context.runOnClient(minecraft -> {
 			minecraft.options.guiScale().set(2);
 			minecraft.resizeGui();
+			minecraft.options.getSoundSourceOptionInstance(SoundSource.MASTER).set(0.0);
+			minecraft.getSoundManager().addListener((sound, soundSet, range) -> sounds.add(sound.getIdentifier().toString()));
 			GrimsSkyblock.get().farmingTracker().reset();
 		});
 
@@ -117,6 +123,36 @@ public class GsbClientGameTest implements FabricClientGameTest {
 
 			context.takeScreenshot("1-hud");
 
+			// The pest cooldown runs out. With only seconds left, the mod counts them down itself.
+			check(lines(context, alert()).isEmpty() && !alert().isVisible(), "no alert while nothing happened");
+			PlayerInfo cooldownLine = context.computeOnClient(minecraft -> addTabLines(minecraft, "Pests:", " Cooldown: 3s").getLast());
+			long cooldownAdded = System.nanoTime();
+			context.waitFor(minecraft -> alert().isVisible(), 400);
+			long alertStarted = System.nanoTime();
+			long alertAfter = (alertStarted - cooldownAdded) / 1_000_000;
+			System.out.println("[GSB test] alert came " + alertAfter + " ms after a 3s cooldown showed up");
+			check(alertAfter >= 2800 && alertAfter <= 4500, "alert came " + alertAfter + " ms after a 3s cooldown showed up");
+			check(lines(context, alert()).equals(List.of("Pest Cooldown")), "alert text was " + lines(context, alert()));
+			context.takeScreenshot("7-pest-cooldown-alert");
+			context.waitFor(minecraft -> !alert().isVisible(), 400);
+			long alertShownFor = (System.nanoTime() - alertStarted) / 1_000_000;
+			System.out.println("[GSB test] alert was shown for " + alertShownFor + " ms with " + dings(sounds) + " dings");
+			check(alertShownFor >= 800 && alertShownFor <= 2500, "the alert was shown for " + alertShownFor + " ms");
+			check(dings(sounds) == 5, "the alert played " + dings(sounds) + " dings");
+
+			// A new cooldown starts, and this time the tab list is what says it is over.
+			sounds.clear();
+			context.runOnClient(minecraft -> cooldownLine.setTabListDisplayName(Component.literal(" Cooldown: 2m 10s")));
+			context.waitTicks(30);
+			check(!alert().isVisible() && dings(sounds) == 0, "a running cooldown is no reason for an alert");
+			context.runOnClient(minecraft -> cooldownLine.setTabListDisplayName(Component.literal(" Cooldown: READY")));
+			context.waitFor(minecraft -> alert().isVisible(), 100);
+			context.waitFor(minecraft -> !alert().isVisible(), 400);
+			check(dings(sounds) == 5, "the alert for READY played " + dings(sounds) + " dings");
+			// READY staying on the tab list is not a new alert.
+			context.waitTicks(40);
+			check(!alert().isVisible() && dings(sounds) == 5, "the alert only plays once");
+
 			// The elements stay visible on top of inventories.
 			context.setScreen(() -> new InventoryScreen(Minecraft.getInstance().player));
 			context.waitTicks(5);
@@ -151,7 +187,18 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			context.getInput().setCursorPos(button[0], button[1]);
 			context.waitTicks(5);
 			context.takeScreenshot("4-config-github-button");
-			context.setScreen(() -> null);
+
+			// The test button of the alert closes the menu and plays it.
+			context.runOnClient(minecraft -> showOption("pestCooldown"));
+			context.waitTicks(20);
+			context.takeScreenshot("4-config-pest-cooldown");
+			sounds.clear();
+			context.runOnClient(minecraft -> GrimsSkyblock.get().config().get().farming.pestCooldown.test.run());
+			context.waitTicks(3);
+			check(context.computeOnClient(minecraft -> GameCompat.screen(minecraft) == null), "the test button closes the menu");
+			check(alert().isVisible(), "the test button shows the alert");
+			context.waitFor(minecraft -> !alert().isVisible(), 400);
+			check(dings(sounds) == 5, "the test alert played " + dings(sounds) + " dings");
 			context.waitTicks(2);
 
 			// /gsb gui opens the editor, where elements can be dragged, resized and reset.
@@ -178,6 +225,24 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			context.getInput().pressMouse(1);
 			context.waitTick();
 			check(position.x == 10 && position.y == 80 && position.scale == 1f, "right-click resets the position");
+
+			// The alert text starts out centred and can be dragged away like everything else.
+			Position alertPosition = alert().position();
+			check(alertPosition.centered && alertPosition.y == 70 && alertPosition.scale == 3f, "the alert starts big and centred");
+			double middle = context.computeOnClient(minecraft -> minecraft.getWindow().getGuiScaledWidth() / 2.0);
+			context.getInput().setCursorPos(middle * guiScale, 80 * guiScale);
+			context.waitTick();
+			context.getInput().holdMouse(0);
+			context.waitTick();
+			context.getInput().moveCursor(-100 * guiScale, 60 * guiScale);
+			context.waitTick();
+			context.getInput().releaseMouse(0);
+			context.waitTick();
+			check(!alertPosition.centered && alertPosition.y == 130 && alertPosition.x < middle - 100,
+					"dragging moved the alert to " + alertPosition.x + ", " + alertPosition.y + " centred: " + alertPosition.centered);
+			context.getInput().pressMouse(1);
+			context.waitTick();
+			check(alertPosition.centered && alertPosition.y == 70 && alertPosition.scale == 3f, "right-click centres the alert again");
 			context.setScreen(() -> null);
 
 			// Resetting the tracker.
@@ -196,6 +261,15 @@ public class GsbClientGameTest implements FabricClientGameTest {
 
 	private static HudElement fortune() {
 		return HudManager.elements().get(1);
+	}
+
+	private static HudElement alert() {
+		return HudManager.elements().get(2);
+	}
+
+	/** How many of the sounds that were played are the ding of the alert. */
+	private static long dings(List<String> sounds) {
+		return sounds.stream().filter("minecraft:entity.arrow.hit_player"::equals).count();
 	}
 
 	/** The text of an element, the cells of table rows joined by {@code |}. */
@@ -218,14 +292,18 @@ public class GsbClientGameTest implements FabricClientGameTest {
 
 	/** Hypixel fills the tab list with fake players whose display names are the lines of its widgets. */
 	@SuppressWarnings("unchecked")
-	private static void addTabLines(Minecraft minecraft, String... lines) {
+	private static List<PlayerInfo> addTabLines(Minecraft minecraft, String... lines) {
 		Set<PlayerInfo> players = (Set<PlayerInfo>) readField(ClientPacketListener.class, "listedPlayers", minecraft.getConnection());
+		List<PlayerInfo> added = new ArrayList<>();
 
-		for (int i = 0; i < lines.length; i++) {
-			PlayerInfo player = new PlayerInfo(new GameProfile(UUID.randomUUID(), "!line" + i), false);
-			player.setTabListDisplayName(Component.literal(lines[i]));
+		for (String line : lines) {
+			PlayerInfo player = new PlayerInfo(new GameProfile(UUID.randomUUID(), "!line" + players.size()), false);
+			player.setTabListDisplayName(Component.literal(line));
 			players.add(player);
+			added.add(player);
 		}
+
+		return added;
 	}
 
 	/** Selects the category of an accordion of the Farming category and opens it. */

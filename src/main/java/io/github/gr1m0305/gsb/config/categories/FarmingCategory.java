@@ -22,6 +22,11 @@ public class FarmingCategory {
 	@Accordion
 	public FortuneDisplay fortuneDisplay = new FortuneDisplay();
 
+	@Expose
+	@ConfigOption(name = "Pest Cooldown Alert", desc = "")
+	@Accordion
+	public PestCooldown pestCooldown = new PestCooldown();
+
 	public static class ProfitTracker {
 		@Expose
 		@ConfigOption(name = "Enabled", desc = "Tracks the crops you farm, the drops of vacuumed pests and what you sell to NPCs on the Garden.\n"
@@ -44,7 +49,11 @@ public class FarmingCategory {
 		public Runnable reset = () -> GrimsSkyblock.get().farmingTracker().reset();
 
 		@Expose
-		public Position position = new Position(10, 80);
+		public Position position = defaultPosition();
+
+		public static Position defaultPosition() {
+			return new Position(10, 80);
+		}
 	}
 
 	public static class FortuneDisplay {
@@ -55,7 +64,31 @@ public class FarmingCategory {
 		public boolean enabled = true;
 
 		@Expose
-		public Position position = new Position(10, 60);
+		public Position position = defaultPosition();
+
+		public static Position defaultPosition() {
+			return new Position(10, 60);
+		}
+	}
+
+	public static class PestCooldown {
+		@Expose
+		@ConfigOption(name = "Enabled", desc = "Dings and shows \"Pest Cooldown\" on your screen for a second when the pest cooldown runs out.\n"
+				+ "§eReads the cooldown from the Pests widget of the tab list.")
+		@ConfigEditorBoolean
+		public boolean enabled = true;
+
+		@ConfigOption(name = "Test Alert", desc = "Closes this menu and plays the alert once, to check how it looks and sounds.")
+		@ConfigEditorButton(buttonText = "Test")
+		public Runnable test = () -> GrimsSkyblock.get().pestCooldownAlert().test();
+
+		@Expose
+		public Position position = defaultPosition();
+
+		/** Big and in the middle of the screen, a bit below the top. */
+		public static Position defaultPosition() {
+			return Position.centered(70, 3f);
+		}
 	}
 
 	public void sanitize() {
@@ -67,20 +100,29 @@ public class FarmingCategory {
 			fortuneDisplay = new FortuneDisplay();
 		}
 
+		if (pestCooldown == null) {
+			pestCooldown = new PestCooldown();
+		}
+
 		if (profitTracker.priceSource == null) {
 			profitTracker.priceSource = PriceSource.NPC_SELL;
 		}
 
 		if (profitTracker.position == null) {
-			profitTracker.position = new Position(10, 80);
+			profitTracker.position = ProfitTracker.defaultPosition();
 		}
 
 		if (fortuneDisplay.position == null) {
-			fortuneDisplay.position = new Position(10, 60);
+			fortuneDisplay.position = FortuneDisplay.defaultPosition();
+		}
+
+		if (pestCooldown.position == null) {
+			pestCooldown.position = PestCooldown.defaultPosition();
 		}
 
 		profitTracker.itemsShown = Math.clamp(profitTracker.itemsShown, 1, 30);
 		profitTracker.position.sanitize();
 		fortuneDisplay.position.sanitize();
+		pestCooldown.position.sanitize();
 	}
 }
