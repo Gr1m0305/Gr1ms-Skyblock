@@ -25,6 +25,7 @@ import org.slf4j.LoggerFactory;
 
 public class GrimsSkyblock implements ClientModInitializer {
 	public static final String MOD_ID = "gr1msskyblock";
+	public static final String GITHUB_URL = "https://github.com/Gr1m0305/Gr1ms-Skyblock";
 	public static final Logger LOGGER = LoggerFactory.getLogger("Gr1msSkyblock");
 
 	private static GrimsSkyblock instance;

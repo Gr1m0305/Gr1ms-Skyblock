@@ -106,6 +106,23 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			});
 			context.waitTicks(20);
 			context.takeScreenshot("4-config-farming");
+
+			// The GitHub button sits in the top right corner of the menu. Only hover it, clicking would open a browser.
+			check(GrimsSkyblock.get().config().get().getSocials().size() == 1, "the menu has the GitHub button");
+			int[] button = context.computeOnClient(minecraft -> {
+				int scaledWidth = minecraft.getWindow().getGuiScaledWidth();
+				int scaledHeight = minecraft.getWindow().getGuiScaledHeight();
+				int scale = minecraft.getWindow().getGuiScale();
+				// The same layout the menu uses for itself.
+				int menuWidth = Math.min(scaledWidth - 100 / scale, 500);
+				int menuHeight = Math.min(scaledHeight - 100 / scale, 400);
+				int buttonX = (scaledWidth - menuWidth) / 2 + menuWidth - 23 + 8;
+				int buttonY = (scaledHeight - menuHeight) / 2 + 7 + 8;
+				return new int[] {buttonX * scale, buttonY * scale};
+			});
+			context.getInput().setCursorPos(button[0], button[1]);
+			context.waitTicks(5);
+			context.takeScreenshot("4-config-github-button");
 			context.setScreen(() -> null);
 			context.waitTicks(2);
 
