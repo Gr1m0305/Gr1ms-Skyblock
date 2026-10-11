@@ -1,6 +1,7 @@
 package io.github.gr1m0305.gsb.test;
 
 import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -11,6 +12,7 @@ import io.github.gr1m0305.gsb.compat.GameCompat;
 import io.github.gr1m0305.gsb.config.ConfigManager;
 import io.github.gr1m0305.gsb.config.categories.FarmingCategory;
 import io.github.gr1m0305.gsb.gui.HudElement;
+import io.github.gr1m0305.gsb.gui.HudLine;
 import io.github.gr1m0305.gsb.gui.HudManager;
 import io.github.gr1m0305.gsb.gui.Position;
 import io.github.gr1m0305.gsb.gui.PositionEditorScreen;
@@ -77,6 +79,8 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			world.getServer().runCommand("give @a minecraft:hay_block[minecraft:custom_data={id:\"ENCHANTED_HAY_BALE\"}] 3");
 			context.waitTicks(10);
 
+			// The tracker only rebuilds its text every three seconds, so wait for it to pick all of that up.
+			List<HudLine> shown = waitForTrackerRefresh(context);
 			List<String> trackerLines = lines(context, tracker());
 			System.out.println("[GSB test] tracker lines: " + trackerLines);
 			check(trackerLines.getFirst().equals("Farming Profit Tracker"), "title");
@@ -87,6 +91,30 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			check(trackerLines.stream().noneMatch(line -> line.contains("Seeds")), "items removed from the sacks are not counted");
 			check(trackerLines.contains("Pests killed: 1"), "pest kill");
 			check(trackerLines.contains("Sold to NPC: 20,480 coins"), "npc sale");
+
+			// However often it is drawn, the text changes no more than once every three seconds.
+			List<Long> refreshTimes = new ArrayList<>();
+			long watchUntil = System.nanoTime() + 7_500_000_000L;
+
+			while (System.nanoTime() < watchUntil) {
+				context.waitTick();
+				List<HudLine> now = context.computeOnClient(minecraft -> tracker().lines());
+
+				if (now != shown) {
+					shown = now;
+					refreshTimes.add(System.nanoTime() / 1_000_000);
+				}
+			}
+
+			System.out.println("[GSB test] tracker refreshed at " + refreshTimes);
+			check(refreshTimes.size() >= 2, "the tracker keeps refreshing, saw " + refreshTimes.size() + " refreshes in 7.5 seconds");
+
+			for (int i = 1; i < refreshTimes.size(); i++) {
+				long gap = refreshTimes.get(i) - refreshTimes.get(i - 1);
+				// A refresh is noticed up to one tick late, hence the small allowance.
+				check(gap >= 2900, "refreshes were only " + gap + " ms apart");
+			}
+
 			context.takeScreenshot("1-hud");
 
 			// The elements stay visible on top of inventories.
@@ -175,6 +203,13 @@ public class GsbClientGameTest implements FabricClientGameTest {
 		return context.computeOnClient(minecraft -> element.lines().stream()
 				.map(line -> String.join("|", line.cells().stream().map(Component::getString).toList()).trim())
 				.toList());
+	}
+
+	/** Waits until the tracker has rebuilt its text and returns the new lines. */
+	private static List<HudLine> waitForTrackerRefresh(ClientGameTestContext context) {
+		List<HudLine> before = context.computeOnClient(minecraft -> tracker().lines());
+		context.waitFor(minecraft -> tracker().lines() != before, 1200);
+		return context.computeOnClient(minecraft -> tracker().lines());
 	}
 
 	private static void sendChat(ClientGameTestContext context, Component message) {

@@ -21,6 +21,7 @@ import io.github.gr1m0305.gsb.config.categories.FarmingCategory;
 import io.github.gr1m0305.gsb.data.BazaarPrices;
 import io.github.gr1m0305.gsb.data.ItemInfo;
 import io.github.gr1m0305.gsb.data.ItemRepository;
+import io.github.gr1m0305.gsb.data.PriceSource;
 import io.github.gr1m0305.gsb.gui.HudElement;
 import io.github.gr1m0305.gsb.gui.HudLine;
 import io.github.gr1m0305.gsb.gui.Position;
@@ -39,7 +40,8 @@ import net.minecraft.network.chat.HoverEvent;
 public final class FarmingProfitTracker {
 	private static final long SAVE_INTERVAL_MILLIS = 60_000;
 	private static final long BAZAAR_REFRESH_MILLIS = 10 * 60_000;
-	private static final long LINE_REFRESH_MILLIS = 250;
+	/** How often the text on screen is rebuilt. Numbers that change all the time are hard to read. */
+	private static final long LINE_REFRESH_MILLIS = 3000;
 	/** Farming this long without a single item being counted means the sack messages are probably turned off. */
 	private static final long SACK_HINT_AFTER_MILLIS = 120_000;
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -53,6 +55,8 @@ public final class FarmingProfitTracker {
 	private final Hud hud = new Hud();
 	private List<HudLine> lines = List.of();
 	private long linesBuiltAt;
+	private PriceSource linesPriceSource;
+	private int linesItemsShown;
 	private long lastTick = System.currentTimeMillis();
 	private long lastSave = System.currentTimeMillis();
 	private long farmingWithoutGainMillis;
@@ -297,10 +301,14 @@ public final class FarmingProfitTracker {
 		@Override
 		public List<HudLine> lines() {
 			long now = System.currentTimeMillis();
+			FarmingCategory.ProfitTracker settings = config.get();
+			// A changed setting should show right away, not seconds later.
+			boolean settingsChanged = settings.priceSource != linesPriceSource || settings.itemsShown != linesItemsShown;
 
-			// Sorting and formatting every frame would be wasteful, a few times per second looks just as live.
-			if (now - linesBuiltAt >= LINE_REFRESH_MILLIS) {
+			if (settingsChanged || now - linesBuiltAt >= LINE_REFRESH_MILLIS) {
 				linesBuiltAt = now;
+				linesPriceSource = settings.priceSource;
+				linesItemsShown = settings.itemsShown;
 				lines = buildLines();
 			}
 
