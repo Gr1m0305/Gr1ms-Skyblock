@@ -1,0 +1,182 @@
+plugins {
+	id 'net.fabricmc.fabric-loom' version "${loom_version}" apply false
+	id 'com.gradleup.shadow' version "${shadow_version}" apply false
+}
+
+// OneDrive turns freshly written folders into read-only placeholders, which Gradle then fails to clean up.
+// When the project is inside OneDrive the build output goes next to the Gradle caches instead, and only the
+// finished mod jars are copied back to build/libs.
+def insideOneDrive = rootDir.absolutePath.split(/[\\\/]/).any { it.startsWith('OneDrive') }
+
+// Every project in here is the mod for one Minecraft version, see settings.gradle.
+subprojects {
+	apply plugin: 'net.fabricmc.fabric-loom'
+	apply plugin: 'com.gradleup.shadow'
+
+	version = "${mod_version}+mc${minecraft_version}"
+	group = maven_group
+
+	if (insideOneDrive) {
+		layout.buildDirectory = new File(gradle.gradleUserHomeDir, "project-builds/${rootProject.name}/${project.name}")
+	}
+
+	repositories {
+		maven {
+			name = 'NotEnoughUpdates'
+			url = 'https://maven.notenoughupdates.org/releases/'
+			content {
+				includeGroup 'org.notenoughupdates.moulconfig'
+			}
+		}
+	}
+
+	configurations {
+		// Libraries that get relocated into the mod jar.
+		shade
+		implementation.extendsFrom shade
+	}
+
+	// All versions are built from the same sources. The few places where Minecraft versions differ are in
+	// src/compat, which has one folder per group of versions that share the same code.
+	sourceSets {
+		main {
+			java.srcDirs = [rootProject.file('src/main/java'), rootProject.file("src/compat/${compat_sources}/java")]
+			resources.srcDirs = [rootProject.file('src/main/resources')]
+		}
+		test {
+			java.srcDirs = [rootProject.file('src/test/java')]
+		}
+	}
+
+	fabricApi {
+		configureTests {
+			createSourceSet = true
+			modId = 'gr1msskyblock-test'
+			enableGameTests = false
+			enableClientGameTests = true
+			eula = true
+		}
+	}
+
+	sourceSets {
+		gametest {
+			java.srcDirs = [rootProject.file('src/gametest/java')]
+			resources.srcDirs = [rootProject.file('src/gametest/resources')]
+		}
+	}
+
+	if (insideOneDrive) {
+		// The game test run directory is wiped before every run, which fails inside OneDrive as well.
+		loom.runs.named('clientGameTest') {
+			runDirectory = layout.buildDirectory.dir('run/clientGameTest')
+		}
+	}
+
+	dependencies {
+		minecraft "com.mojang:minecraft:${minecraft_version}"
+		implementation "net.fabricmc:fabric-loader:${loader_version}"
+		implementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
+
+		// MoulConfig (the config menu) is partly written in Kotlin, so the Kotlin runtime has to be present.
+		implementation "net.fabricmc:fabric-language-kotlin:${fabric_kotlin_version}"
+		shade("org.notenoughupdates.moulconfig:${moulconfig_artifact}:${moulconfig_version}") {
+			transitive = false
+		}
+
+		// The mods needed next to ours when running the finished jar, see runProductionClientGameTest.
+		productionRuntimeMods "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
+		productionRuntimeMods "net.fabricmc:fabric-language-kotlin:${fabric_kotlin_version}"
+
+		testImplementation platform('org.junit:junit-bom:5.13.4')
+		testImplementation 'org.junit.jupiter:junit-jupiter'
+		testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	}
+
+	processResources {
+		def properties = [version: project.version, minecraft_version: minecraft_version]
+		inputs.properties properties
+
+		filesMatching('fabric.mod.json') {
+			expand properties
+		}
+
+		// MoulConfig needs some private parts of Minecraft opened up. Its access widener is shipped as ours, so
+		// the entries always belong to the MoulConfig version that is bundled.
+		from({ zipTree(configurations.shade.singleFile) }) {
+			include 'moulconfig.accesswidener'
+			rename { 'gr1msskyblock.accesswidener' }
+		}
+	}
+
+	tasks.withType(JavaCompile).configureEach {
+		it.options.release = 25
+		it.options.encoding = 'UTF-8'
+	}
+
+	java {
+		toolchain {
+			languageVersion = JavaLanguageVersion.of(25)
+		}
+	}
+
+	test {
+		useJUnitPlatform()
+	}
+
+	jar {
+		// The plain jar does not contain MoulConfig, the shadowJar below is the one to install.
+		archiveBaseName = 'Gr1msSkyblock'
+		archiveClassifier = 'slim'
+	}
+
+	shadowJar {
+		configurations = [project.configurations.shade]
+		archiveFileName = "Gr1msSkyblock_${mod_version}_${minecraft_version}.jar"
+
+		// Other mods bundle their own MoulConfig, so ours has to live in its own package.
+		relocate 'io.github.notenoughupdates.moulconfig', 'io.github.gr1m0305.gsb.deps.moulconfig'
+		mergeServiceFiles()
+
+		// Shadow has to see every file to relocate the service and Kotlin module files.
+		duplicatesStrategy = DuplicatesStrategy.INCLUDE
+		// Our files are added first, so this keeps our fabric.mod.json over the one inside MoulConfig.
+		filesMatching('fabric.mod.json') {
+			duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+		}
+		// Already part of the jar as gr1msskyblock.accesswidener.
+		exclude 'moulconfig.accesswidener'
+		rename { it == 'LICENSE' ? 'LICENSE_moulconfig' : it }
+	}
+
+	assemble.dependsOn shadowJar
+
+	// Runs the game tests against the jar that gets installed, to catch mistakes in how MoulConfig is bundled.
+	def gametestJar = tasks.register('gametestJar', com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar) {
+		archiveFileName = "Gr1msSkyblock_${mod_version}_${minecraft_version}-gametest.jar"
+		from sourceSets.gametest.output
+		configurations = []
+		relocate 'io.github.notenoughupdates.moulconfig', 'io.github.gr1m0305.gsb.deps.moulconfig'
+	}
+
+	tasks.register('runProductionClientGameTest', net.fabricmc.loom.task.prod.ClientProductionRunTask) {
+		group = 'fabric'
+		description = 'Runs the client game tests with the finished mod jar.'
+		mods.setFrom(shadowJar, gametestJar, configurations.productionRuntimeMods)
+		jvmArgs.add('-Dfabric.client.gametest')
+		runDir = layout.buildDirectory.dir('run/productionClientGameTest')
+	}
+}
+
+// `gradlew build` leaves exactly the current mod jars in build/libs: Gr1msSkyblock_<mod version>_<minecraft version>.jar
+def collectJars = tasks.register('collectJars', Sync) {
+	group = 'build'
+	description = 'Gathers the mod jars of all Minecraft versions in build/libs.'
+	from subprojects.collect { it.tasks.named('shadowJar') }
+	into layout.projectDirectory.dir('build/libs')
+}
+
+tasks.register('build') {
+	group = 'build'
+	description = 'Builds and tests the mod for every Minecraft version.'
+	dependsOn collectJars
+}

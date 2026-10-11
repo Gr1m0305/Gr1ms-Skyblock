@@ -1,0 +1,15 @@
+{
+	"schemaVersion": 1,
+	"id": "gr1msskyblock-test",
+	"version": "1.0.0",
+	"name": "Gr1m's Skyblock Game Tests",
+	"environment": "client",
+	"entrypoints": {
+		"fabric-client-gametest": [
+			"io.github.gr1m0305.gsb.test.GsbClientGameTest"
+		]
+	},
+	"depends": {
+		"gr1msskyblock": "*"
+	}
+}

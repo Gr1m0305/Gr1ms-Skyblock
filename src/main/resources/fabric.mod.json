@@ -1,0 +1,30 @@
+{
+	"schemaVersion": 1,
+	"id": "gr1msskyblock",
+	"version": "${version}",
+	"name": "Gr1m's Skyblock",
+	"description": "Features for Hypixel SkyBlock. Open the config with /gsb.",
+	"authors": [
+		"Gr1m0305"
+	],
+	"contact": {
+		"sources": "https://github.com/Gr1m0305/Gr1ms-Skyblock"
+	},
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"io.github.gr1m0305.gsb.GrimsSkyblock"
+		]
+	},
+	"mixins": [
+		"gr1msskyblock.mixins.json"
+	],
+	"accessWidener": "gr1msskyblock.accesswidener",
+	"depends": {
+		"fabricloader": ">=0.19.3",
+		"minecraft": "${minecraft_version}",
+		"java": ">=25",
+		"fabric-api": "*",
+		"fabric-language-kotlin": "*"
+	}
+}

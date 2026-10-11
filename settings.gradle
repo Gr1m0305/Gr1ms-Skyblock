@@ -1,0 +1,30 @@
+pluginManagement {
+	repositories {
+		maven {
+			name = 'Fabric'
+			url = 'https://maven.fabricmc.net/'
+		}
+		mavenCentral()
+		gradlePluginPortal()
+	}
+}
+
+plugins {
+	// Lets Gradle download the JDK 25 toolchain Minecraft 26.1 needs when it is not installed.
+	id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
+rootProject.name = 'gr1ms-skyblock'
+
+// The mod is built once for every Minecraft version that has a folder in versions/, which are meant to be the
+// four most recent releases. Each folder only holds a gradle.properties, the code is shared.
+//
+// A version can only be added once MoulConfig is published for it. 26.3 is missing for that reason: there is
+// no modern-26.3 yet and the 26.2 one does not work there, 26.3 replaced the rendering and input code it uses.
+file('versions').listFiles()
+		.findAll { new File(it, 'gradle.properties').isFile() }
+		.sort { it.name }
+		.each { versionDirectory ->
+			include versionDirectory.name
+			project(":${versionDirectory.name}").projectDir = versionDirectory
+		}
