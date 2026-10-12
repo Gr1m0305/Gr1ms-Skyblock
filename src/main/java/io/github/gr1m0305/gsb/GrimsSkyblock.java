@@ -8,6 +8,7 @@ import io.github.gr1m0305.gsb.config.ConfigManager;
 import io.github.gr1m0305.gsb.data.BazaarPrices;
 import io.github.gr1m0305.gsb.data.ItemRepository;
 import io.github.gr1m0305.gsb.data.PetTextures;
+import io.github.gr1m0305.gsb.features.farming.FarmingBuffTracker;
 import io.github.gr1m0305.gsb.features.farming.FarmingProfitTracker;
 import io.github.gr1m0305.gsb.features.farming.FarmingStatTracker;
 import io.github.gr1m0305.gsb.features.farming.PestCooldownAlert;
@@ -83,6 +84,7 @@ public class GrimsSkyblock implements ClientModInitializer {
 		PetTextures petTextures = new PetTextures(directory.resolve("cache").resolve("pets.json"));
 		petTextures.init();
 		HudManager.register(new PetDisplay(() -> config.get().general.petDisplay, petTextures));
+		HudManager.register(new FarmingBuffTracker(() -> config.get().farming.buffTracker));
 		HudManager.init();
 
 		ClientTickEvents.END_CLIENT_TICK.register(this::onTick);

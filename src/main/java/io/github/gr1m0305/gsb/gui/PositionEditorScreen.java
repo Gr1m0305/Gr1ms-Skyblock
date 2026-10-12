@@ -18,6 +18,9 @@ import org.jspecify.annotations.Nullable;
 public class PositionEditorScreen extends Screen {
 	private static final int BOX_PADDING = 2;
 	private static final float SCALE_STEP = 0.1f;
+	/** The help text is three lines this far apart. */
+	private static final int HELP_LINE = 12;
+	private static final int HELP_HEIGHT = HELP_LINE * 3;
 	private static final int WHITE = 0xFFFFFFFF;
 
 	private record Placed(HudElement element, List<HudLine> lines, HudRenderer.Layout layout, HudManager.Placement placement) {
@@ -112,21 +115,24 @@ public class PositionEditorScreen extends Screen {
 			HudRenderer.draw(graphics, font, entry.lines(), entry.layout(), placement.x(), placement.y(), entry.element().position().scale);
 		}
 
+		// The help sits in the middle of the screen, the place elements are least likely to be at.
 		int centerX = width / 2;
-		graphics.centeredText(font, LegacyText.parse("§e§lGUI Editor"), centerX, 8, WHITE);
+		int textY = height / 2 - HELP_HEIGHT / 2;
+		graphics.centeredText(font, LegacyText.parse("§e§lGUI Editor"), centerX, textY, WHITE);
 
 		if (placed.isEmpty()) {
-			graphics.centeredText(font, LegacyText.parse("§cNo features with a GUI element are enabled. Turn one on in /gsb first."), centerX, 22, WHITE);
+			graphics.centeredText(font, LegacyText.parse("§cNo features with a GUI element are enabled. Turn one on in /gsb first."), centerX, textY + HELP_LINE, WHITE);
 			return;
 		}
 
-		graphics.centeredText(font, LegacyText.parse("§7Drag to move §8| §7Scroll to resize §8| §7Right-click to reset §8| §7Arrow keys to nudge"), centerX, 20, WHITE);
+		graphics.centeredText(font, LegacyText.parse("§7Drag to move §8| §7Scroll to resize §8| §7Right-click to reset §8| §7Arrow keys to nudge"),
+				centerX, textY + HELP_LINE, WHITE);
 
 		if (active != null) {
 			Position position = active.element().position();
 			String info = "§e" + active.element().name() + " §7x: §f" + Math.round(active.placement().x()) + " §7y: §f" + Math.round(active.placement().y())
 					+ " §7size: §f" + Math.round(position.scale * 100) + "%";
-			graphics.centeredText(font, LegacyText.parse(info), centerX, 32, WHITE);
+			graphics.centeredText(font, LegacyText.parse(info), centerX, textY + HELP_LINE * 2, WHITE);
 		}
 	}
 

@@ -33,6 +33,11 @@ public class FarmingCategory {
 	public StatTracker statTracker = new StatTracker();
 
 	@Expose
+	@ConfigOption(name = "Farming Buff Tracker", desc = "")
+	@Accordion
+	public BuffTracker buffTracker = new BuffTracker();
+
+	@Expose
 	@ConfigOption(name = "Pest Cooldown Alert", desc = "")
 	@Accordion
 	public PestCooldown pestCooldown = new PestCooldown();
@@ -88,6 +93,23 @@ public class FarmingCategory {
 		}
 	}
 
+	public static class BuffTracker {
+		@Expose
+		@ConfigOption(name = "Enabled", desc = "Shows on the Garden how long your pest Farming Fortune bonus still lasts, "
+				+ "and how long the spray on the plot you are in does.\n"
+				+ "§eReads both from the Pests widget of the tab list.")
+		@ConfigEditorBoolean
+		public boolean enabled = false;
+
+		@Expose
+		public Position position = defaultPosition();
+
+		/** At the top, right of the Pet Display. */
+		public static Position defaultPosition() {
+			return new Position(330, 10);
+		}
+	}
+
 	public static class PestCooldown {
 		private static final float MIN_ALERT_SECONDS = 0.5f;
 		private static final float MAX_ALERT_SECONDS = 10f;
@@ -125,8 +147,16 @@ public class FarmingCategory {
 			statTracker = new StatTracker();
 		}
 
+		if (buffTracker == null) {
+			buffTracker = new BuffTracker();
+		}
+
 		if (pestCooldown == null) {
 			pestCooldown = new PestCooldown();
+		}
+
+		if (buffTracker.position == null) {
+			buffTracker.position = BuffTracker.defaultPosition();
 		}
 
 		if (profitTracker.priceSource == null) {
@@ -160,6 +190,7 @@ public class FarmingCategory {
 				: Math.clamp(pestCooldown.alertSeconds, PestCooldown.MIN_ALERT_SECONDS, PestCooldown.MAX_ALERT_SECONDS);
 		profitTracker.position.sanitize();
 		statTracker.position.sanitize();
+		buffTracker.position.sanitize();
 		pestCooldown.position.sanitize();
 	}
 }

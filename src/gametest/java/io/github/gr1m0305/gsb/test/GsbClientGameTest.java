@@ -100,12 +100,17 @@ public class GsbClientGameTest implements FabricClientGameTest {
 				FarmingCategory farming = GrimsSkyblock.get().config().get().farming;
 				farming.profitTracker.enabled = true;
 				farming.statTracker.enabled = true;
+				farming.buffTracker.enabled = true;
 				farming.pestCooldown.enabled = true;
 			});
 			context.waitTicks(10);
 			check(tracker().isVisible() && stats().isVisible(), "both elements are shown on the Garden once they are turned on");
 			check("Farming Profit Tracker".equals(tracker().title()) && "Farming Stats".equals(stats().title()), "both are panels with a title");
 			check(alert().title() == null, "the alert is bare text");
+
+			// The buff tracker reads the Pests widget, which this tab list does not have yet.
+			check(buffs().isVisible() && "Farming Buffs".equals(buffs().title()), "the buff tracker is shown on the Garden");
+			check(lines(context, buffs()).equals(List.of("Pest Fortune: not in tab list", "Plot Spray: not in tab list")), "buffs without the widget: " + lines(context, buffs()));
 
 			// The pet display has the pet of the tab list with a bar for the way to its next level.
 			check(SkyblockState.onSkyblock() && pet().isVisible() && "Pet".equals(pet().title()), "the pet display is shown on SkyBlock");
@@ -249,7 +254,9 @@ public class GsbClientGameTest implements FabricClientGameTest {
 
 			// The pest cooldown runs out. With only seconds left, the mod counts them down itself.
 			check(lines(context, alert()).isEmpty() && !alert().isVisible(), "no alert while nothing happened");
-			PlayerInfo cooldownLine = context.computeOnClient(minecraft -> addTabLines(minecraft, "Pests:", " Cooldown: 3s").getLast());
+			List<PlayerInfo> pestLines = context.computeOnClient(minecraft ->
+					addTabLines(minecraft, "Pests:", " Alive: 0", " Spray: Compost (12m)", " Bonus: +200☘ 29m", " Cooldown: 3s"));
+			PlayerInfo cooldownLine = pestLines.getLast();
 			long cooldownAdded = System.nanoTime();
 			context.waitFor(minecraft -> alert().isVisible(), 400);
 			long alertStarted = System.nanoTime();
@@ -277,6 +284,23 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			context.waitTicks(40);
 			check(!alert().isVisible() && dings(sounds) == 10, "the alert only plays once");
 
+			// The buff tracker shows how long the pest fortune and the spray of the plot still last.
+			check(lines(context, buffs()).equals(List.of("Pest Fortune: 29m (+200☘)", "Plot Spray: 12m (Compost)")), "buffs were " + lines(context, buffs()));
+			check(context.computeOnClient(minecraft -> buffs().lines().stream().allMatch(line -> line.icon() != null)), "both buffs have an icon");
+			context.runOnClient(minecraft -> {
+				pestLines.get(2).setTabListDisplayName(Component.literal(" Spray: None"));
+				pestLines.get(3).setTabListDisplayName(Component.literal(" Bonus: INACTIVE"));
+			});
+			context.waitTicks(10);
+			check(lines(context, buffs()).equals(List.of("Pest Fortune: Inactive", "Plot Spray: Not sprayed")), "buffs that ran out were " + lines(context, buffs()));
+			// Walking onto another plot puts the spray of that one into the tab list.
+			context.runOnClient(minecraft -> {
+				pestLines.get(2).setTabListDisplayName(Component.literal(" Spray: Honey Jar (53s)"));
+				pestLines.get(3).setTabListDisplayName(Component.literal(" Bonus: +200☘ 5m 2s"));
+			});
+			context.waitTicks(10);
+			check(lines(context, buffs()).equals(List.of("Pest Fortune: 5m 2s (+200☘)", "Plot Spray: 53s (Honey Jar)")), "buffs were " + lines(context, buffs()));
+
 			// The elements stay visible on top of inventories.
 			context.setScreen(() -> new InventoryScreen(Minecraft.getInstance().player));
 			context.waitTicks(5);
@@ -299,6 +323,10 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			context.runOnClient(minecraft -> showOption(FarmingCategory.StatTracker.class, "stats"));
 			context.waitTicks(20);
 			context.takeScreenshot("4-config-stat-tracker");
+
+			context.runOnClient(minecraft -> showOption("buffTracker"));
+			context.waitTicks(20);
+			context.takeScreenshot("4-config-buff-tracker");
 
 			// The pet display is not a farming feature and has a category of its own.
 			context.runOnClient(minecraft -> showOption(GeneralCategory.class, "petDisplay"));
@@ -401,7 +429,7 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			context.runOnClient(minecraft -> areaLine.setTabListDisplayName(Component.literal("Area: Hub")));
 			context.waitTicks(10);
 			check(SkyblockState.onSkyblock() && !SkyblockState.onGarden(), "the Hub is SkyBlock, but not the Garden");
-			check(!tracker().isVisible() && !stats().isVisible() && pet().isVisible(), "only the pet display is shown in the Hub");
+			check(!tracker().isVisible() && !stats().isVisible() && !buffs().isVisible() && pet().isVisible(), "only the pet display is shown in the Hub");
 			context.takeScreenshot("8-pet-in-the-hub");
 
 			// Where the tab list has no Pet widget the pet that was out stays on the screen.
@@ -442,6 +470,10 @@ public class GsbClientGameTest implements FabricClientGameTest {
 
 	private static HudElement pet() {
 		return HudManager.elements().get(3);
+	}
+
+	private static HudElement buffs() {
+		return HudManager.elements().get(4);
 	}
 
 	/** How many of the sounds that were played are the ding of the alert. */
