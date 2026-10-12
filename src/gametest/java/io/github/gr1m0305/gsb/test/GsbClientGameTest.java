@@ -12,11 +12,15 @@ import io.github.gr1m0305.gsb.GrimsSkyblock;
 import io.github.gr1m0305.gsb.compat.GameCompat;
 import io.github.gr1m0305.gsb.config.ConfigManager;
 import io.github.gr1m0305.gsb.config.categories.FarmingCategory;
+import io.github.gr1m0305.gsb.data.ItemInfo;
+import io.github.gr1m0305.gsb.data.LegacyMaterials;
+import io.github.gr1m0305.gsb.features.farming.FarmingStat;
 import io.github.gr1m0305.gsb.gui.HudElement;
 import io.github.gr1m0305.gsb.gui.HudLine;
 import io.github.gr1m0305.gsb.gui.HudManager;
 import io.github.gr1m0305.gsb.gui.Position;
 import io.github.gr1m0305.gsb.gui.PositionEditorScreen;
+import io.github.gr1m0305.gsb.skyblock.ItemIcons;
 import io.github.gr1m0305.gsb.skyblock.SkyblockState;
 import io.github.notenoughupdates.moulconfig.gui.MoulConfigEditor;
 import io.github.notenoughupdates.moulconfig.platform.MoulConfigScreenComponent;
@@ -27,11 +31,16 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.Style;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
+import net.minecraft.resources.Identifier;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 
 /**
  * Runs the mod in a real client. Hypixel is imitated by putting its tab list lines, chat messages and items
@@ -58,25 +67,49 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			context.waitFor(minecraft -> minecraft.player != null && minecraft.level != null);
 			context.waitTicks(60);
 			check(!SkyblockState.onGarden(), "a normal world must not count as the Garden");
-			check(!tracker().isVisible() && !fortune().isVisible(), "nothing is shown outside of the Garden");
+			check(!tracker().isVisible() && !stats().isVisible(), "nothing is shown outside of the Garden");
+			checkIcons(context);
 
-			context.runOnClient(minecraft -> addTabLines(minecraft, "Area: Garden", "Stats:", " Farming Fortune: ☘1203", " Wheat Fortune: ☘521"));
+			context.runOnClient(minecraft -> addTabLines(minecraft, "Area: Garden", "Stats:", " Speed: ✦400", " Farming Fortune: ☘1203", " Wheat Fortune: ☘521"));
 			// The inventory is not watched for a few seconds after joining a world.
 			context.waitTicks(120);
 			check(SkyblockState.onGarden(), "the Area line of the tab list puts the player on the Garden");
 
 			// Every feature is off until it is turned on in the menu.
-			check(!tracker().isEnabled() && !fortune().isEnabled() && !alert().isEnabled(), "all features are off by default");
-			check(!tracker().isVisible() && !fortune().isVisible(), "features that are off show nothing on the Garden");
+			check(!tracker().isEnabled() && !stats().isEnabled() && !alert().isEnabled(), "all features are off by default");
+			check(!tracker().isVisible() && !stats().isVisible(), "features that are off show nothing on the Garden");
 			context.runOnClient(minecraft -> {
 				FarmingCategory farming = GrimsSkyblock.get().config().get().farming;
 				farming.profitTracker.enabled = true;
-				farming.fortuneDisplay.enabled = true;
+				farming.statTracker.enabled = true;
 				farming.pestCooldown.enabled = true;
 			});
 			context.waitTicks(10);
-			check(tracker().isVisible() && fortune().isVisible(), "both elements are shown on the Garden once they are turned on");
-			check(lines(context, fortune()).equals(List.of("Farming Fortune: ☘1724")), "fortune line was " + lines(context, fortune()));
+			check(tracker().isVisible() && stats().isVisible(), "both elements are shown on the Garden once they are turned on");
+			check("Farming Profit Tracker".equals(tracker().title()) && "Farming Stats".equals(stats().title()), "both are panels with a title");
+			check(alert().title() == null, "the alert is bare text");
+
+			// The stat tracker shows the stats picked in the config, in that order.
+			List<String> defaultStats = statLines(context);
+			check(defaultStats.equals(List.of("Total Fortune: ☘1,724", "Speed: ✦400", "Yaw: -141.15", "Pitch: 3.30")), "default stats were " + defaultStats);
+			check(context.computeOnClient(minecraft -> stats().lines().stream().allMatch(line -> line.icon() != null)), "every stat has an icon");
+			List<FarmingStat> picked = GrimsSkyblock.get().config().get().farming.statTracker.stats;
+			context.runOnClient(minecraft -> {
+				picked.clear();
+				picked.addAll(List.of(FarmingStat.PITCH, FarmingStat.CROP_FORTUNE, FarmingStat.FARMING_FORTUNE, FarmingStat.BONUS_PEST_CHANCE));
+			});
+			List<String> pickedStats = statLines(context);
+			check(pickedStats.equals(List.of("Pitch: 3.30", "Wheat Fortune: ☘521", "Farming Fortune: ☘1,203", "Bonus Pest Chance: not in tab list")),
+					"picked stats were " + pickedStats);
+			context.runOnClient(minecraft -> picked.clear());
+			check(lines(context, stats()).equals(List.of("No stats picked, add some in /gsb")), "without stats: " + lines(context, stats()));
+			context.runOnClient(minecraft -> picked.addAll(List.of(FarmingStat.values())));
+			context.waitTicks(2);
+			context.takeScreenshot("0-all-stats");
+			context.runOnClient(minecraft -> {
+				picked.clear();
+				picked.addAll(FarmingStat.DEFAULTS);
+			});
 
 			// Crops that went into the sacks.
 			sendChat(context, Component.literal("[Sacks] ")
@@ -102,7 +135,8 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			List<HudLine> shown = waitForTrackerRefresh(context);
 			List<String> trackerLines = lines(context, tracker());
 			System.out.println("[GSB test] tracker lines: " + trackerLines);
-			check(trackerLines.getFirst().equals("Farming Profit Tracker"), "title");
+			check(context.computeOnClient(minecraft -> tracker().lines().stream().allMatch(line -> line.isRow() == (line.icon() != null))),
+					"the items of the tracker have icons, its totals do not");
 			check(trackerLines.stream().anyMatch(line -> line.startsWith("1,234x|") && line.contains("Wheat")), "wheat from the sack message");
 			check(trackerLines.stream().anyMatch(line -> line.startsWith("32x|") && line.contains("Melon")), "12 melon from sacks plus 20 from the inventory");
 			check(trackerLines.stream().anyMatch(line -> line.startsWith("1x|") && line.contains("Overclocker")), "overclocker from the inventory");
@@ -178,11 +212,16 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			check(context.computeOnClient(minecraft -> GameCompat.screen(minecraft) instanceof MoulConfigScreenComponent), "/gsb opens the config menu");
 			context.takeScreenshot("3-config");
 			context.runOnClient(minecraft -> {
-				showOption("fortuneDisplay");
+				showOption("statTracker");
 				showOption("profitTracker");
 			});
 			context.waitTicks(20);
 			context.takeScreenshot("4-config-farming");
+
+			// The list the stats of the stat tracker are picked from.
+			context.runOnClient(minecraft -> showOption(FarmingCategory.StatTracker.class, "stats"));
+			context.waitTicks(20);
+			context.takeScreenshot("4-config-stat-tracker");
 
 			// The GitHub button sits in the top right corner of the menu. Only hover it, clicking would open a browser.
 			check(GrimsSkyblock.get().config().get().getSocials().size() == 1, "the menu has the GitHub button");
@@ -228,7 +267,7 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			context.waitTick();
 			context.getInput().releaseMouse(0);
 			context.waitTick();
-			check(position.x == 210 && position.y == 120, "dragging moved the tracker to " + position.x + ", " + position.y);
+			check(position.x == 210 && position.y == 140, "dragging moved the tracker to " + position.x + ", " + position.y);
 			context.getInput().scroll(1);
 			context.waitTick();
 			context.getInput().scroll(1);
@@ -237,7 +276,7 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			context.takeScreenshot("5-gui-editor");
 			context.getInput().pressMouse(1);
 			context.waitTick();
-			check(position.x == 10 && position.y == 80 && position.scale == 1f, "right-click resets the position");
+			check(position.x == 10 && position.y == 100 && position.scale == 1f, "right-click resets the position");
 
 			// The alert text starts out centred and can be dragged away like everything else.
 			Position alertPosition = alert().position();
@@ -272,7 +311,7 @@ public class GsbClientGameTest implements FabricClientGameTest {
 		return HudManager.elements().get(0);
 	}
 
-	private static HudElement fortune() {
+	private static HudElement stats() {
 		return HudManager.elements().get(1);
 	}
 
@@ -287,9 +326,53 @@ public class GsbClientGameTest implements FabricClientGameTest {
 
 	/** The text of an element, the cells of table rows joined by {@code |}. */
 	private static List<String> lines(ClientGameTestContext context, HudElement element) {
-		return context.computeOnClient(minecraft -> element.lines().stream()
+		return context.computeOnClient(minecraft -> text(element.lines()));
+	}
+
+	private static List<String> text(List<HudLine> lines) {
+		return lines.stream()
 				.map(line -> String.join("|", line.cells().stream().map(Component::getString).toList()).trim())
-				.toList());
+				.toList();
+	}
+
+	/** The text of the stat tracker with the player looking in a known direction. The game counts a yaw of 218.85 as -141.15. */
+	private static List<String> statLines(ClientGameTestContext context) {
+		return context.computeOnClient(minecraft -> {
+			minecraft.player.setYRot(218.85f);
+			minecraft.player.setXRot(3.3f);
+			return text(stats().lines());
+		});
+	}
+
+	/** The icons of SkyBlock items are made from what the Hypixel API says about them. */
+	private static void checkIcons(ClientGameTestContext context) {
+		context.runOnClient(minecraft -> {
+			for (String name : LegacyMaterials.modernNames()) {
+				check(BuiltInRegistries.ITEM.containsKey(Identifier.withDefaultNamespace(name)), "this version of the game has no item called " + name);
+			}
+
+			check(ItemIcons.of(item("INK_SACK", 3, false, "", "")).is(Items.COCOA_BEANS), "cocoa beans are the third ink sack");
+			check(ItemIcons.of(item("HAY_BLOCK", 0, false, "", "")).is(Items.HAY_BLOCK), "names that never changed");
+			ItemStack melon = ItemIcons.of(item("MELON", 0, true, "", ""));
+			check(melon.is(Items.MELON_SLICE) && melon.hasFoil(), "an enchanted melon slice shines");
+			check(!ItemIcons.of(item("MELON", 0, false, "", "")).hasFoil(), "a melon slice does not shine");
+			ItemStack head = ItemIcons.of(item("SKULL_ITEM", 3, false, "ewogICJ0aW1lc3RhbXAiIDogMTY4", ""));
+			check(head.is(Items.PLAYER_HEAD) && head.has(DataComponents.PROFILE), "heads get their texture");
+
+			// A model is only used while a resource pack has it, Hypixel's are not there in this test.
+			ItemStack modelled = ItemIcons.of(item("PAPER", 0, false, "", "minecraft:diamond"));
+			check(Identifier.withDefaultNamespace("diamond").equals(modelled.get(DataComponents.ITEM_MODEL)), "a model the game has is used");
+			ItemStack plain = ItemIcons.of(item("PAPER", 0, false, "", "hypixel_skyblock:item/uncategorized/mutant_nether_wart"));
+			check(plain.is(Items.PAPER) && Identifier.withDefaultNamespace("paper").equals(plain.get(DataComponents.ITEM_MODEL)),
+					"a model the game does not have is left out");
+
+			check(ItemIcons.of(item("NOT_A_MATERIAL", 0, false, "", "")).is(Items.PAPER), "unknown materials are paper");
+			check(ItemIcons.of((ItemInfo) null).is(Items.PAPER), "unknown items are paper");
+		});
+	}
+
+	private static ItemInfo item(String material, int durability, boolean glowing, String skin, String model) {
+		return new ItemInfo("TEST", "Test", "COMMON", 0, new ItemInfo.Appearance(material, durability, glowing, skin, model));
 	}
 
 	/** Waits until the tracker has rebuilt its text and returns the new lines. */
@@ -321,10 +404,15 @@ public class GsbClientGameTest implements FabricClientGameTest {
 
 	/** Selects the category of an accordion of the Farming category and opens it. */
 	private static void showOption(String fieldName) {
+		showOption(FarmingCategory.class, fieldName);
+	}
+
+	/** Scrolls the config menu to an option, opening what it is inside of. */
+	private static void showOption(Class<?> owner, String fieldName) {
 		MoulConfigEditor<?> editor = (MoulConfigEditor<?>) readField(ConfigManager.class, "editor", GrimsSkyblock.get().config());
 
 		try {
-			check(editor.goToOption(editor.getOptionFromField(FarmingCategory.class.getField(fieldName))), "config option " + fieldName + " exists");
+			check(editor.goToOption(editor.getOptionFromField(owner.getField(fieldName))), "config option " + fieldName + " exists");
 		} catch (NoSuchFieldException e) {
 			throw new AssertionError(e);
 		}

@@ -7,8 +7,8 @@ import io.github.gr1m0305.gsb.compat.GameCompat;
 import io.github.gr1m0305.gsb.config.ConfigManager;
 import io.github.gr1m0305.gsb.data.BazaarPrices;
 import io.github.gr1m0305.gsb.data.ItemRepository;
-import io.github.gr1m0305.gsb.features.farming.FarmingFortuneDisplay;
 import io.github.gr1m0305.gsb.features.farming.FarmingProfitTracker;
+import io.github.gr1m0305.gsb.features.farming.FarmingStatTracker;
 import io.github.gr1m0305.gsb.features.farming.PestCooldownAlert;
 import io.github.gr1m0305.gsb.gui.HudManager;
 import io.github.gr1m0305.gsb.skyblock.SkyblockState;
@@ -74,7 +74,7 @@ public class GrimsSkyblock implements ClientModInitializer {
 				directory.resolve("farming_tracker.json"));
 
 		HudManager.register(farmingTracker.hud());
-		HudManager.register(new FarmingFortuneDisplay(() -> config.get().farming.fortuneDisplay));
+		HudManager.register(new FarmingStatTracker(() -> config.get().farming.statTracker));
 		pestCooldownAlert = new PestCooldownAlert(() -> config.get().farming.pestCooldown);
 		HudManager.register(pestCooldownAlert);
 		HudManager.init();

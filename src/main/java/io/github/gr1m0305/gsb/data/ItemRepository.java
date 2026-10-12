@@ -19,7 +19,7 @@ import io.github.gr1m0305.gsb.util.StringUtil;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Names, rarities and NPC prices of all SkyBlock items, taken from the Hypixel API.
+ * Names, rarities, looks and NPC prices of all SkyBlock items, taken from the Hypixel API.
  * The last download is kept on disk so the data is there right after starting the game.
  */
 public final class ItemRepository {
@@ -47,7 +47,9 @@ public final class ItemRepository {
 					setItems(parseCache(reader));
 				}
 
-				fresh = System.currentTimeMillis() - Files.getLastModifiedTime(cacheFile).toMillis() < MAX_CACHE_AGE_MILLIS;
+				fresh = System.currentTimeMillis() - Files.getLastModifiedTime(cacheFile).toMillis() < MAX_CACHE_AGE_MILLIS
+						// A cache from before the mod drew item icons does not say what the items look like.
+						&& byId.values().stream().anyMatch(item -> !item.appearance().material().isEmpty());
 			}
 		} catch (IOException | RuntimeException e) {
 			GrimsSkyblock.LOGGER.warn("Could not read the item cache", e);
@@ -182,10 +184,21 @@ public final class ItemRepository {
 			String name = StringUtil.stripFormatting(item.get("name").getAsString()).trim();
 			String tier = item.has("tier") ? item.get("tier").getAsString() : "";
 			double npcSellPrice = item.has("npc_sell_price") ? item.get("npc_sell_price").getAsDouble() : 0;
-			items.put(id, new ItemInfo(id, name, tier.isEmpty() ? "COMMON" : tier, npcSellPrice));
+			// The texture of a head comes with a signature, which only matters to the server.
+			JsonElement skin = item.get("skin") instanceof JsonObject skinObject ? skinObject.get("value") : null;
+			ItemInfo.Appearance appearance = new ItemInfo.Appearance(string(item, "material"),
+					item.has("durability") ? item.get("durability").getAsInt() : 0,
+					item.has("glowing") && item.get("glowing").getAsBoolean(),
+					skin != null ? skin.getAsString() : "",
+					string(item, "item_model"));
+			items.put(id, new ItemInfo(id, name, tier.isEmpty() ? "COMMON" : tier, npcSellPrice, appearance));
 		}
 
 		return items;
+	}
+
+	private static String string(JsonObject object, String key) {
+		return object.has(key) ? object.get(key).getAsString() : "";
 	}
 
 	static JsonArray toCacheJson(Map<String, ItemInfo> items) {
@@ -197,6 +210,26 @@ public final class ItemRepository {
 			object.addProperty("name", item.name());
 			object.addProperty("tier", item.tier());
 			object.addProperty("npc", item.npcSellPrice());
+			ItemInfo.Appearance appearance = item.appearance();
+			object.addProperty("material", appearance.material());
+
+			// Most items have none of these, leaving them out keeps the file small.
+			if (appearance.durability() != 0) {
+				object.addProperty("durability", appearance.durability());
+			}
+
+			if (appearance.glowing()) {
+				object.addProperty("glowing", true);
+			}
+
+			if (!appearance.skin().isEmpty()) {
+				object.addProperty("skin", appearance.skin());
+			}
+
+			if (!appearance.model().isEmpty()) {
+				object.addProperty("model", appearance.model());
+			}
+
 			array.add(object);
 		}
 
@@ -209,7 +242,12 @@ public final class ItemRepository {
 		for (JsonElement element : JsonParser.parseReader(reader).getAsJsonArray()) {
 			JsonObject item = element.getAsJsonObject();
 			String id = item.get("id").getAsString();
-			items.put(id, new ItemInfo(id, item.get("name").getAsString(), item.get("tier").getAsString(), item.get("npc").getAsDouble()));
+			ItemInfo.Appearance appearance = new ItemInfo.Appearance(string(item, "material"),
+					item.has("durability") ? item.get("durability").getAsInt() : 0,
+					item.has("glowing") && item.get("glowing").getAsBoolean(),
+					string(item, "skin"),
+					string(item, "model"));
+			items.put(id, new ItemInfo(id, item.get("name").getAsString(), item.get("tier").getAsString(), item.get("npc").getAsDouble(), appearance));
 		}
 
 		return items;

@@ -76,7 +76,7 @@ public final class HudManager {
 				continue;
 			}
 
-			HudRenderer.Layout layout = HudRenderer.layout(minecraft.font, lines);
+			HudRenderer.Layout layout = HudRenderer.layout(minecraft.font, element.title(), lines);
 			Placement placement = place(element.position(), layout, graphics.guiWidth(), graphics.guiHeight());
 			HudRenderer.draw(graphics, minecraft.font, lines, layout, placement.x(), placement.y(), element.position().scale);
 		}

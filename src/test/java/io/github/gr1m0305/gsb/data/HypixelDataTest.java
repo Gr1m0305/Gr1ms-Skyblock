@@ -14,9 +14,12 @@ class HypixelDataTest {
 	private static final String ITEMS = """
 			{"success":true,"lastUpdated":1791302445914,"items":[
 			{"material":"MELON","name":"Melon Slice","npc_sell_price":2,"id":"MELON"},
-			{"material":"MELON","name":"Enchanted Melon Slice","tier":"UNCOMMON","npc_sell_price":320,"id":"ENCHANTED_MELON"},
-			{"material":"HAY_BLOCK","name":"Enchanted Hay Bale","tier":"UNCOMMON","id":"ENCHANTED_HAY_BLOCK"},
-			{"material":"PAPER","name":"Overclocker 3000","tier":"LEGENDARY","npc_sell_price":250000,"id":"OVERCLOCKER_3000"},
+			{"material":"MELON","glowing":true,"name":"Enchanted Melon Slice","tier":"UNCOMMON","npc_sell_price":320,"id":"ENCHANTED_MELON"},
+			{"material":"HAY_BLOCK","glowing":true,"name":"Enchanted Hay Bale","tier":"UNCOMMON","id":"ENCHANTED_HAY_BLOCK"},
+			{"material":"PAPER","item_model":"hypixel_skyblock:item/island_relevant/garden/greenhouse/overclocker_3000",
+			"name":"Overclocker 3000","tier":"LEGENDARY","npc_sell_price":250000,"id":"OVERCLOCKER_3000"},
+			{"material":"SKULL_ITEM","durability":3,"skin":{"value":"ewogICJ0aW1lc3RhbXAiIDogMTY4","signature":"cuvhVQ=="},
+			"item_model":"hypixel_skyblock:item/island_relevant/garden/cropie","name":"Cropie","tier":"UNCOMMON","npc_sell_price":25000,"id":"CROPIE"},
 			{"material":"INK_SACK","durability":3,"name":"Cocoa Beans","npc_sell_price":3,"id":"INK_SACK:3"},
 			{"material":"RED_ROSE","name":"§cRose Bouquet","tier":"RARE","id":"ROSE_BOUQUET"},
 			{"material":"CAULDRON","name":"Cauldron","id":"CAULDRON"},
@@ -53,6 +56,44 @@ class HypixelDataTest {
 		assertEquals('6', repository.get("OVERCLOCKER_3000").rarityColor());
 		assertEquals("Rose Bouquet", repository.get("ROSE_BOUQUET").name());
 		assertNull(repository.get("NOT_AN_ITEM"));
+	}
+
+	@Test
+	void readsWhatItemsLookLike() {
+		ItemRepository repository = repository();
+
+		assertEquals(new ItemInfo.Appearance("MELON", 0, true, "", ""), repository.get("ENCHANTED_MELON").appearance());
+		assertEquals(new ItemInfo.Appearance("MELON", 0, false, "", ""), repository.get("MELON").appearance());
+		assertEquals(new ItemInfo.Appearance("INK_SACK", 3, false, "", ""), repository.get("INK_SACK:3").appearance());
+		assertEquals(new ItemInfo.Appearance("PAPER", 0, false, "", "hypixel_skyblock:item/island_relevant/garden/greenhouse/overclocker_3000"),
+				repository.get("OVERCLOCKER_3000").appearance());
+		assertEquals(new ItemInfo.Appearance("SKULL_ITEM", 3, false, "ewogICJ0aW1lc3RhbXAiIDogMTY4", "hypixel_skyblock:item/island_relevant/garden/cropie"),
+				repository.get("CROPIE").appearance());
+	}
+
+	@Test
+	void knowsTheNamesOfOldMaterials() {
+		assertEquals("melon_slice", LegacyMaterials.modernName("MELON", 0));
+		assertEquals("melon", LegacyMaterials.modernName("MELON_BLOCK", 0));
+		assertEquals("cocoa_beans", LegacyMaterials.modernName("INK_SACK", 3));
+		assertEquals("green_dye", LegacyMaterials.modernName("INK_SACK", 2));
+		assertEquals("rose_bush", LegacyMaterials.modernName("DOUBLE_PLANT", 4));
+		assertEquals("sunflower", LegacyMaterials.modernName("DOUBLE_PLANT", 0));
+		assertEquals("blue_orchid", LegacyMaterials.modernName("RED_ROSE", 1));
+		assertEquals("player_head", LegacyMaterials.modernName("SKULL_ITEM", 3));
+		// The number only matters for materials that had variants.
+		assertEquals("carrot", LegacyMaterials.modernName("CARROT_ITEM", 7));
+		// Most names were never changed.
+		assertEquals("hay_block", LegacyMaterials.modernName("HAY_BLOCK", 0));
+		assertEquals("paper", LegacyMaterials.modernName("PAPER", 0));
+		assertEquals("", LegacyMaterials.modernName("", 0));
+	}
+
+	@Test
+	void readsACacheFromBeforeItemsHadIcons() {
+		Map<String, ItemInfo> items = ItemRepository.parseCache(new StringReader("""
+				[{"id":"ENCHANTED_MELON","name":"Enchanted Melon Slice","tier":"UNCOMMON","npc":320.0}]"""));
+		assertEquals(new ItemInfo("ENCHANTED_MELON", "Enchanted Melon Slice", "UNCOMMON", 320, ItemInfo.Appearance.UNKNOWN), items.get("ENCHANTED_MELON"));
 	}
 
 	@Test

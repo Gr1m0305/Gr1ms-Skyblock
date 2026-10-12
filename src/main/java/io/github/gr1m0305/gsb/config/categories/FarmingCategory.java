@@ -1,12 +1,20 @@
 package io.github.gr1m0305.gsb.config.categories;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Objects;
+
 import com.google.gson.annotations.Expose;
+import com.google.gson.annotations.SerializedName;
 import io.github.gr1m0305.gsb.GrimsSkyblock;
 import io.github.gr1m0305.gsb.data.PriceSource;
+import io.github.gr1m0305.gsb.features.farming.FarmingStat;
 import io.github.gr1m0305.gsb.gui.Position;
 import io.github.notenoughupdates.moulconfig.annotations.Accordion;
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorBoolean;
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorButton;
+import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorDraggableList;
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorDropdown;
 import io.github.notenoughupdates.moulconfig.annotations.ConfigEditorSlider;
 import io.github.notenoughupdates.moulconfig.annotations.ConfigOption;
@@ -17,10 +25,12 @@ public class FarmingCategory {
 	@Accordion
 	public ProfitTracker profitTracker = new ProfitTracker();
 
+	// The tracker used to show nothing but the Farming Fortune. Whoever had that turned on keeps it.
 	@Expose
-	@ConfigOption(name = "Farming Fortune", desc = "")
+	@SerializedName(value = "statTracker", alternate = "fortuneDisplay")
+	@ConfigOption(name = "Farming Stat Tracker", desc = "")
 	@Accordion
-	public FortuneDisplay fortuneDisplay = new FortuneDisplay();
+	public StatTracker statTracker = new StatTracker();
 
 	@Expose
 	@ConfigOption(name = "Pest Cooldown Alert", desc = "")
@@ -51,23 +61,30 @@ public class FarmingCategory {
 		@Expose
 		public Position position = defaultPosition();
 
+		/** Below the Farming Stat Tracker. */
 		public static Position defaultPosition() {
-			return new Position(10, 80);
+			return new Position(10, 100);
 		}
 	}
 
-	public static class FortuneDisplay {
+	public static class StatTracker {
 		@Expose
-		@ConfigOption(name = "Enabled", desc = "Shows Farming Fortune plus crop fortune on the Garden.\n"
-				+ "§eReads both from the Stats widget of the tab list.")
+		@ConfigOption(name = "Enabled", desc = "Shows the farming stats you pick below on the Garden.\n"
+				+ "§eAll but Yaw and Pitch are read from the tab list, so they have to be in its Stats and Pests widgets.")
 		@ConfigEditorBoolean
 		public boolean enabled = false;
+
+		@Expose
+		@ConfigOption(name = "Stats Shown", desc = "The stats in the tracker, from top to bottom. Drag them to change their order.\n"
+				+ "§eTotal Fortune is your Farming Fortune plus the fortune of the crop.")
+		@ConfigEditorDraggableList
+		public List<FarmingStat> stats = new ArrayList<>(FarmingStat.DEFAULTS);
 
 		@Expose
 		public Position position = defaultPosition();
 
 		public static Position defaultPosition() {
-			return new Position(10, 60);
+			return new Position(10, 10);
 		}
 	}
 
@@ -96,8 +113,8 @@ public class FarmingCategory {
 			profitTracker = new ProfitTracker();
 		}
 
-		if (fortuneDisplay == null) {
-			fortuneDisplay = new FortuneDisplay();
+		if (statTracker == null) {
+			statTracker = new StatTracker();
 		}
 
 		if (pestCooldown == null) {
@@ -112,8 +129,17 @@ public class FarmingCategory {
 			profitTracker.position = ProfitTracker.defaultPosition();
 		}
 
-		if (fortuneDisplay.position == null) {
-			fortuneDisplay.position = FortuneDisplay.defaultPosition();
+		if (statTracker.stats == null) {
+			statTracker.stats = new ArrayList<>(FarmingStat.DEFAULTS);
+		}
+
+		// A stat this version does not know is read as null, and listing one twice makes no sense. The menu
+		// adds to and removes from this very list, so it has to be one that can change.
+		statTracker.stats = new ArrayList<>(new LinkedHashSet<>(statTracker.stats));
+		statTracker.stats.removeIf(Objects::isNull);
+
+		if (statTracker.position == null) {
+			statTracker.position = StatTracker.defaultPosition();
 		}
 
 		if (pestCooldown.position == null) {
@@ -122,7 +148,7 @@ public class FarmingCategory {
 
 		profitTracker.itemsShown = Math.clamp(profitTracker.itemsShown, 1, 30);
 		profitTracker.position.sanitize();
-		fortuneDisplay.position.sanitize();
+		statTracker.position.sanitize();
 		pestCooldown.position.sanitize();
 	}
 }

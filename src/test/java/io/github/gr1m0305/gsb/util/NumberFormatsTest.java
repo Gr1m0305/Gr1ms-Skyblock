@@ -32,6 +32,15 @@ class NumberFormatsTest {
 	}
 
 	@Test
+	void formatsDegrees() {
+		assertEquals("-141.15", NumberFormats.degrees(-141.1532f));
+		assertEquals("3.30", NumberFormats.degrees(3.3f));
+		assertEquals("90.00", NumberFormats.degrees(90f));
+		assertEquals("0.00", NumberFormats.degrees(-0.001f));
+		assertEquals("-0.01", NumberFormats.degrees(-0.006f));
+	}
+
+	@Test
 	void formatsDurations() {
 		assertEquals("1d 15h 35m 19s", NumberFormats.duration(((24 + 15) * 3600 + 35 * 60 + 19) * 1000L));
 		assertEquals("0s", NumberFormats.duration(0));

@@ -59,6 +59,12 @@ public final class PestCooldownAlert extends HudElement {
 		playback.start();
 	}
 
+	/** The alert is nothing but its big red text. */
+	@Override
+	public @Nullable String title() {
+		return null;
+	}
+
 	@Override
 	public Position position() {
 		return config.get().position;

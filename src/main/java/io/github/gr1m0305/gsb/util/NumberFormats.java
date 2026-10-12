@@ -45,6 +45,12 @@ public final class NumberFormats {
 		return (value < 0 ? "-" : "") + number + SUFFIXES[unit];
 	}
 
+	/** An angle in degrees with two decimal places, {@code -141.1532} becomes {@code -141.15}. */
+	public static String degrees(float value) {
+		// Rounded as a whole number first, an angle just below zero would otherwise read -0.00.
+		return String.format(Locale.US, "%.2f", Math.round(value * 100f) / 100f);
+	}
+
 	/** {@code 142519000} becomes {@code 1d 15h 35m 19s}. */
 	public static String duration(long millis) {
 		long totalSeconds = Math.max(0, millis) / 1000;

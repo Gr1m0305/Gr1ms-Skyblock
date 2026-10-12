@@ -25,6 +25,7 @@ import io.github.gr1m0305.gsb.data.PriceSource;
 import io.github.gr1m0305.gsb.gui.HudElement;
 import io.github.gr1m0305.gsb.gui.HudLine;
 import io.github.gr1m0305.gsb.gui.Position;
+import io.github.gr1m0305.gsb.skyblock.ItemIcons;
 import io.github.gr1m0305.gsb.skyblock.SkyblockState;
 import io.github.gr1m0305.gsb.util.ChatUtil;
 import io.github.gr1m0305.gsb.util.NumberFormats;
@@ -32,6 +33,9 @@ import io.github.gr1m0305.gsb.util.StringUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Tracks what farming on the Garden earns: the crops farmed, the drops of vacuumed pests and the coins
@@ -54,6 +58,7 @@ public final class FarmingProfitTracker {
 	private final InventoryWatcher inventory = new InventoryWatcher();
 	private final Hud hud = new Hud();
 	private List<HudLine> lines = List.of();
+	private @Nullable List<HudLine> exampleLines;
 	private long linesBuiltAt;
 	private PriceSource linesPriceSource;
 	private int linesItemsShown;
@@ -228,52 +233,50 @@ public final class FarmingProfitTracker {
 	private List<HudLine> buildLines() {
 		FarmingTrackerLogic.Summary summary = logic.summarize(this::priceOf, config.get().itemsShown);
 		List<HudLine> result = new ArrayList<>();
-		result.add(HudLine.of("§e§lFarming Profit Tracker"));
 
 		if (!items.isLoaded()) {
-			result.add(HudLine.of(" §cWaiting for item data from the Hypixel API"));
+			result.add(HudLine.of("§cWaiting for item data from the Hypixel API"));
 		}
 
 		for (FarmingTrackerLogic.ItemRow row : summary.rows()) {
 			ItemInfo info = items.get(row.id());
 			String name = items.displayName(row.id()).replace("Enchanted ", "Ench ");
-			result.add(itemRow(row.count(), info != null ? info.rarityColor() : 'f', name, row.value()));
+			result.add(itemRow(ItemIcons.of(info), row.count(), info != null ? info.rarityColor() : 'f', name, row.value()));
 		}
 
 		if (summary.rows().isEmpty()) {
-			result.add(HudLine.of(" §7Nothing farmed yet"));
+			result.add(HudLine.of("§7Nothing farmed yet"));
 		}
 
 		if (summary.hiddenItems() > 0) {
-			result.add(HudLine.of(" §7+ " + summary.hiddenItems() + " more: §6" + NumberFormats.compact(summary.hiddenValue())));
+			result.add(HudLine.of("§7+ " + summary.hiddenItems() + " more: §6" + NumberFormats.compact(summary.hiddenValue())));
 		}
 
 		addTotals(result, summary.pestsKilled(), summary.npcCoins(), summary.totalProfit(), summary.profitPerHour(), summary.uptimeMillis());
 		return result;
 	}
 
-	private static HudLine itemRow(long count, char rarityColor, String name, double value) {
-		return HudLine.row("§7" + NumberFormats.grouped(count) + "x", "§" + rarityColor + name, "§6" + NumberFormats.compact(value));
+	private static HudLine itemRow(ItemStack icon, long count, char rarityColor, String name, double value) {
+		return HudLine.row("§f" + NumberFormats.grouped(count) + "x", "§" + rarityColor + name, "§6" + NumberFormats.compact(value)).withIcon(icon);
 	}
 
 	private static void addTotals(List<HudLine> result, long pestsKilled, double npcCoins, double totalProfit, double profitPerHour, long uptimeMillis) {
-		result.add(HudLine.of("§7Pests killed: §e" + NumberFormats.grouped(pestsKilled)));
-		result.add(HudLine.of("§7Sold to NPC: §6" + NumberFormats.grouped(npcCoins) + " coins"));
-		result.add(HudLine.of("§eTotal Profit: §6" + NumberFormats.grouped(totalProfit) + " coins"));
-		result.add(HudLine.of("§eProfit Per Hour: §6" + NumberFormats.grouped(profitPerHour) + " coins"));
-		result.add(HudLine.of("§eTotal Uptime: §b" + NumberFormats.duration(uptimeMillis)));
+		result.add(HudLine.of("§fPests killed: §e" + NumberFormats.grouped(pestsKilled)));
+		result.add(HudLine.of("§fSold to NPC: §6" + NumberFormats.grouped(npcCoins) + " coins"));
+		result.add(HudLine.of("§fTotal Profit: §6" + NumberFormats.grouped(totalProfit) + " coins"));
+		result.add(HudLine.of("§fProfit Per Hour: §6" + NumberFormats.grouped(profitPerHour) + " coins"));
+		result.add(HudLine.of("§fTotal Uptime: §e" + NumberFormats.duration(uptimeMillis)));
 	}
 
 	/** Made-up numbers, so the GUI editor shows the tracker at a realistic size before anything was farmed. */
-	private static List<HudLine> exampleLines() {
+	private static List<HudLine> buildExampleLines() {
 		List<HudLine> result = new ArrayList<>();
-		result.add(HudLine.of("§e§lFarming Profit Tracker"));
-		result.add(itemRow(76_549, 'a', "Ench Cocoa Beans", 36_743_520));
-		result.add(itemRow(105_061, 'a', "Ench Melon Slice", 33_619_520));
-		result.add(itemRow(23_056, 'a', "Ench Pumpkin", 36_889_600));
-		result.add(itemRow(59_783, 'a', "Ench Carrot", 28_695_840));
-		result.add(itemRow(61_769, 'a', "Ench Potato", 29_649_120));
-		result.add(itemRow(84, '6', "Overclocker 3000", 21_000_000));
+		result.add(itemRow(ItemIcons.glowing(Items.COCOA_BEANS), 76_549, 'a', "Ench Cocoa Beans", 36_743_520));
+		result.add(itemRow(ItemIcons.glowing(Items.MELON_SLICE), 105_061, 'a', "Ench Melon Slice", 33_619_520));
+		result.add(itemRow(ItemIcons.glowing(Items.PUMPKIN), 23_056, 'a', "Ench Pumpkin", 36_889_600));
+		result.add(itemRow(ItemIcons.glowing(Items.CARROT), 59_783, 'a', "Ench Carrot", 28_695_840));
+		result.add(itemRow(ItemIcons.glowing(Items.POTATO), 61_769, 'a', "Ench Potato", 29_649_120));
+		result.add(itemRow(ItemIcons.of(Items.PAPER), 84, '6', "Overclocker 3000", 21_000_000));
 		addTotals(result, 4_383, 52_480_000, 186_597_600, 14_083_123, 47_700_000);
 		return result;
 	}
@@ -317,7 +320,16 @@ public final class FarmingProfitTracker {
 
 		@Override
 		public List<HudLine> previewLines() {
-			return logic.data().items.isEmpty() ? exampleLines() : lines();
+			if (!logic.data().items.isEmpty()) {
+				return lines();
+			}
+
+			// The editor asks for these on every frame.
+			if (exampleLines == null) {
+				exampleLines = buildExampleLines();
+			}
+
+			return exampleLines;
 		}
 	}
 }

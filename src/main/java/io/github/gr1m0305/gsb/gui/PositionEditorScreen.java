@@ -54,7 +54,7 @@ public class PositionEditorScreen extends Screen {
 				continue;
 			}
 
-			HudRenderer.Layout layout = HudRenderer.layout(font, lines);
+			HudRenderer.Layout layout = HudRenderer.layout(font, element.title(), lines);
 			placed.add(new Placed(element, lines, layout, HudManager.place(element.position(), layout, width, height)));
 		}
 
