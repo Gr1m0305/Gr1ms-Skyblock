@@ -28,6 +28,12 @@ final class InventoryWatcher {
 	private int worldChangeTicks;
 	private int menuGraceTicks;
 	private boolean sackMenu;
+	private long serverMenuSeenAt = Long.MIN_VALUE / 2;
+
+	/** Whether a menu of the server, like a shop, a visitor or the sacks themselves, was open at or after the given time. */
+	boolean serverMenuOpenSince(long time) {
+		return serverMenuSeenAt >= time;
+	}
 
 	void tick(Minecraft minecraft, boolean tracking, FarmingTrackerLogic logic, long now) {
 		LocalPlayer player = minecraft.player;
@@ -47,9 +53,14 @@ final class InventoryWatcher {
 		Screen screen = GameCompat.screen(minecraft);
 		boolean menuOpen = screen instanceof AbstractContainerScreen<?>;
 
-		if (menuOpen) {
+		if (screen instanceof AbstractContainerScreen<?> menu) {
 			menuGraceTicks = MENU_GRACE_TICKS;
 			sackMenu = StringUtil.stripFormatting(screen.getTitle().getString()).contains("Sack");
+
+			// The player's own inventory is a menu too, but not one that can reach into the sacks.
+			if (menu.getMenu() != player.inventoryMenu) {
+				serverMenuSeenAt = now;
+			}
 		}
 
 		Map<String, Integer> current = countItems(player.getInventory());

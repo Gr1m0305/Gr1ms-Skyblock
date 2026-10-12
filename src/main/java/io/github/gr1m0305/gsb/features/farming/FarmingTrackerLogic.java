@@ -14,10 +14,14 @@ import java.util.function.ToDoubleFunction;
  * <p>Items are counted from two places: changes of the player's inventory while no menu is open, and the
  * "[Sacks]" chat messages. Moving items between those two would count them twice, so such moves are
  * remembered for a moment and cancelled out.
+ *
+ * <p>Items that go away again are taken off, in the sacks as well as in the inventory. That is what keeps
+ * crops from being counted twice when they are crafted into their enchanted form: the enchanted item comes in
+ * and the crops it was made of go out.
  */
 public final class FarmingTrackerLogic {
-	/** How long an item put into a sack by hand may take to show up in a "[Sacks]" message. */
-	static final long SACK_INSERT_LIFETIME_MILLIS = 60_000;
+	/** How long an item moved into or out of a sack by hand may take to show up in a "[Sacks]" message. */
+	static final long SACK_MESSAGE_DELAY_MILLIS = 60_000;
 	/** How far apart the "Moved ... from your Sacks" message and the inventory update may be. */
 	static final long SACK_WITHDRAWAL_WINDOW_MILLIS = 3_000;
 	/** The tracker pauses after this long without a sign of farming. Short breaks, like typing a command, are below it. */
@@ -46,7 +50,8 @@ public final class FarmingTrackerLogic {
 		}
 	}
 
-	private final ExpiringCounts insertedIntoSacks = new ExpiringCounts(SACK_INSERT_LIFETIME_MILLIS);
+	private final ExpiringCounts insertedIntoSacks = new ExpiringCounts(SACK_MESSAGE_DELAY_MILLIS);
+	private final ExpiringCounts takenOutOfSacks = new ExpiringCounts(SACK_MESSAGE_DELAY_MILLIS);
 	private final ExpiringCounts withdrawnFromSacks = new ExpiringCounts(SACK_WITHDRAWAL_WINDOW_MILLIS);
 	private final ArrayDeque<RecentGain> recentInventoryGains = new ArrayDeque<>();
 	private FarmingTrackerData data;
@@ -72,6 +77,7 @@ public final class FarmingTrackerLogic {
 	public void reset() {
 		data = new FarmingTrackerData();
 		insertedIntoSacks.clear();
+		takenOutOfSacks.clear();
 		withdrawnFromSacks.clear();
 		recentInventoryGains.clear();
 		dirty = true;
@@ -101,24 +107,35 @@ public final class FarmingTrackerLogic {
 		insertedIntoSacks.add(id, amount, now);
 	}
 
-	/** A "[Sacks]" chat message reported a change. */
-	public void sackChanged(String id, long delta, long now) {
-		// Items leaving the sacks went to a menu or to the inventory, neither is farming.
-		if (delta <= 0) {
-			return;
-		}
+	/**
+	 * A "[Sacks]" chat message reported a change.
+	 *
+	 * @param duringMenu whether a menu of the server was open in the seconds the message is about
+	 */
+	public void sackChanged(String id, long delta, long now, boolean duringMenu) {
+		if (delta > 0) {
+			long counted = delta - insertedIntoSacks.consume(id, delta, now);
 
-		long counted = delta - insertedIntoSacks.consume(id, delta, now);
+			if (counted > 0) {
+				addItem(id, counted);
+				lastActivity = now;
+				lastGain = now;
+			}
+		} else if (delta < 0) {
+			long lost = -delta - takenOutOfSacks.consume(id, -delta, now);
 
-		if (counted > 0) {
-			addItem(id, counted);
-			lastActivity = now;
-			lastGain = now;
+			// Crafted into something else or planted again, either way it is not there to be sold anymore. What a
+			// menu took is different: that was sold, handed in or moved to the inventory, where a menu counts nothing.
+			if (lost > 0 && !duringMenu) {
+				addItem(id, -lost);
+			}
 		}
 	}
 
 	/** Chat said items were moved from the sacks to the inventory, which the inventory tracking sees as a gain. */
 	public void withdrawnFromSack(String id, long amount, long now) {
+		// The "[Sacks]" message that follows reports them as gone, which they are not.
+		takenOutOfSacks.add(id, amount, now);
 		pruneRecentGains(now);
 		long remaining = amount;
 

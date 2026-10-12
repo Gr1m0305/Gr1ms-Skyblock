@@ -24,8 +24,8 @@ class FarmingTrackerLogicTest {
 	@Test
 	void countsInventoryAndSackGains() {
 		logic.inventoryChanged("ENCHANTED_MELON", 5, 1_000);
-		logic.sackChanged("WHEAT", 1_234, 2_000);
-		logic.sackChanged("WHEAT", 100, 7_000);
+		logic.sackChanged("WHEAT", 1_234, 2_000, false);
+		logic.sackChanged("WHEAT", 100, 7_000, false);
 
 		assertEquals(5, count("ENCHANTED_MELON"));
 		assertEquals(1_334, count("WHEAT"));
@@ -56,10 +56,64 @@ class FarmingTrackerLogicTest {
 	}
 
 	@Test
-	void sackLossesAreIgnored() {
-		logic.sackChanged("WHEAT", 500, 1_000);
-		logic.sackChanged("WHEAT", -400, 2_000);
+	void cropsCraftedInTheSacksAreSwappedForWhatTheyBecame() {
+		logic.sackChanged("WHEAT", 2_000, 1_000, false);
+		// The Personal Compactor made an enchanted item out of 160 Wheat, one "[Sacks]" message reports both.
+		logic.sackChanged("ENCHANTED_WHEAT", 1, 6_000, false);
+		logic.sackChanged("WHEAT", -160, 6_000, false);
+
+		assertEquals(1_840, count("WHEAT"));
+		assertEquals(1, count("ENCHANTED_WHEAT"));
+		// Worth exactly what the 2,000 Wheat were, not 160 Wheat more.
+		assertEquals(2_000 * 6, summary(10).totalProfit());
+	}
+
+	@Test
+	void craftingWithCropsFromBeforeTheTrackerRanDoesNotAddThem() {
+		// 100 Wheat farmed now and 60 that were in the sack already became one enchanted item.
+		logic.sackChanged("WHEAT", 100, 1_000, false);
+		logic.sackChanged("ENCHANTED_WHEAT", 1, 6_000, false);
+		logic.sackChanged("WHEAT", -160, 6_000, false);
+
+		FarmingTrackerLogic.Summary summary = summary(10);
+		assertEquals(100 * 6, summary.totalProfit());
+		assertEquals(1, summary.rows().size());
+		assertEquals("ENCHANTED_WHEAT", summary.rows().getFirst().id());
+	}
+
+	@Test
+	void whatAMenuTakesOutOfTheSacksIsNotLost() {
+		logic.sackChanged("WHEAT", 500, 1_000, false);
+		// Sold at the Bazaar, handed to a visitor or moved to the inventory with the sack open.
+		logic.sackChanged("WHEAT", -400, 2_000, true);
 		assertEquals(500, count("WHEAT"));
+
+		// What comes in while a menu is open still counts, it may have been farmed just before.
+		logic.sackChanged("WHEAT", 20, 2_000, true);
+		assertEquals(520, count("WHEAT"));
+	}
+
+	@Test
+	void takingItemsOutOfTheSacksByCommandChangesNothing() {
+		logic.sackChanged("ENCHANTED_MELON", 40, 1_000, false);
+		logic.withdrawnFromSack("ENCHANTED_MELON", 32, 10_000);
+		logic.inventoryChanged("ENCHANTED_MELON", 32, 10_050);
+		// The "[Sacks]" message about it comes seconds later, here with 5 more that were really used up.
+		logic.sackChanged("ENCHANTED_MELON", -37, 14_000, false);
+		assertEquals(35, count("ENCHANTED_MELON"));
+
+		// The same amount leaving the sacks again later is a loss like any other.
+		logic.sackChanged("ENCHANTED_MELON", -32, 20_000, false);
+		assertEquals(3, count("ENCHANTED_MELON"));
+	}
+
+	@Test
+	void aCommandWithdrawalIsForgottenAfterAWhile() {
+		logic.sackChanged("ENCHANTED_MELON", 40, 1_000, false);
+		logic.withdrawnFromSack("ENCHANTED_MELON", 32, 10_000);
+		logic.inventoryChanged("ENCHANTED_MELON", 32, 10_050);
+		logic.sackChanged("ENCHANTED_MELON", -32, 10_000 + FarmingTrackerLogic.SACK_MESSAGE_DELAY_MILLIS + 1, false);
+		assertEquals(8, count("ENCHANTED_MELON"));
 	}
 
 	@Test
@@ -67,7 +121,7 @@ class FarmingTrackerLogicTest {
 		logic.inventoryChanged("ENCHANTED_MELON", 64, 1_000);
 		logic.insertedIntoSack("ENCHANTED_MELON", 64, 20_000);
 		// The sack message reports the 64 moved items together with 10 that were farmed meanwhile.
-		logic.sackChanged("ENCHANTED_MELON", 74, 24_000);
+		logic.sackChanged("ENCHANTED_MELON", 74, 24_000, false);
 
 		assertEquals(74, count("ENCHANTED_MELON"));
 	}
@@ -75,7 +129,7 @@ class FarmingTrackerLogicTest {
 	@Test
 	void sackInsertsAreForgottenAfterAWhile() {
 		logic.insertedIntoSack("WHEAT", 64, 1_000);
-		logic.sackChanged("WHEAT", 50, 1_000 + FarmingTrackerLogic.SACK_INSERT_LIFETIME_MILLIS + 1);
+		logic.sackChanged("WHEAT", 50, 1_000 + FarmingTrackerLogic.SACK_MESSAGE_DELAY_MILLIS + 1, false);
 		assertEquals(50, count("WHEAT"));
 	}
 
@@ -109,7 +163,7 @@ class FarmingTrackerLogicTest {
 
 	@Test
 	void listsTheMostValuableItemsFirstAndSumsUpTheRest() {
-		logic.sackChanged("WHEAT", 1_000, 1_000);
+		logic.sackChanged("WHEAT", 1_000, 1_000, false);
 		logic.inventoryChanged("ENCHANTED_MELON", 100, 1_000);
 		logic.inventoryChanged("CROPIE", 2, 1_000);
 		logic.inventoryChanged("MYSTERY_ITEM", 9, 1_000);
@@ -134,7 +188,7 @@ class FarmingTrackerLogicTest {
 		assertEquals(100, logic.data().uptimeMillis);
 
 		// A gain counts as farming too.
-		logic.sackChanged("WHEAT", 10, idle + 50);
+		logic.sackChanged("WHEAT", 10, idle + 50, false);
 		logic.tick(idle + 100, 50, false);
 		assertEquals(150, logic.data().uptimeMillis);
 	}
@@ -160,8 +214,9 @@ class FarmingTrackerLogicTest {
 		logic.tick(60_000, 50, true);
 		assertFalse(logic.isPaused(60_000));
 
-		// Items leaving the inventory and selling to an NPC are no farming.
+		// Items leaving the inventory or the sacks and selling to an NPC are no farming.
 		logic.inventoryChanged("CROPIE", -1, 80_000);
+		logic.sackChanged("WHEAT", -160, 80_000, false);
 		logic.soldToNpc(100, 1);
 		assertTrue(logic.isPaused(80_000));
 	}

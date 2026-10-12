@@ -72,6 +72,14 @@ class FarmingChatParserTest {
 	}
 
 	@Test
+	void readsHowFarBackASackMessageGoes() {
+		assertEquals(5, FarmingChatParser.sackMessageSeconds("[Sacks] +1,246 items, -160 items. (Last 5s.)"));
+		assertEquals(30, FarmingChatParser.sackMessageSeconds("[Sacks] -2 items. (Last 30s.)"));
+		// Better to look back too far than not far enough.
+		assertEquals(10, FarmingChatParser.sackMessageSeconds("[Sacks] +5 items."));
+	}
+
+	@Test
 	void readsTheHoverTextOfSackMessages() {
 		String hover = """
 				Added items:

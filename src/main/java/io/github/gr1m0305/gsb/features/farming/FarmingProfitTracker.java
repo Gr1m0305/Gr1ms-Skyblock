@@ -48,6 +48,8 @@ public final class FarmingProfitTracker {
 	private static final long LINE_REFRESH_MILLIS = 3000;
 	/** Farming this long without a single item being counted means the sack messages are probably turned off. */
 	private static final long SACK_HINT_AFTER_MILLIS = 120_000;
+	/** A "[Sacks]" message takes a moment to arrive, so it also covers a little more than the seconds it names. */
+	private static final long SACK_MESSAGE_MARGIN_MILLIS = 1_500;
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
 	private final Supplier<FarmingCategory.ProfitTracker> config;
@@ -148,12 +150,15 @@ public final class FarmingProfitTracker {
 		}
 
 		if (sackMessage) {
+			// The message sums up the last seconds. A menu that was open in those can be what took items out of the sacks.
+			long messagePeriod = FarmingChatParser.sackMessageSeconds(text) * 1000L + SACK_MESSAGE_MARGIN_MILLIS;
+			boolean duringMenu = inventory.serverMenuOpenSince(now - messagePeriod);
 			Set<String> hoverTexts = new LinkedHashSet<>();
 			collectHoverTexts(message, hoverTexts);
 
 			for (String hoverText : hoverTexts) {
 				for (FarmingChatParser.SackChange change : FarmingChatParser.parseSackHover(hoverText)) {
-					logic.sackChanged(items.idFromName(change.item()), change.delta(), now);
+					logic.sackChanged(items.idFromName(change.item()), change.delta(), now, duringMenu);
 				}
 			}
 

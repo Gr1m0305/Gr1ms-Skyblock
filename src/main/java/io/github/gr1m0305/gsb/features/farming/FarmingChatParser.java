@@ -18,6 +18,10 @@ public final class FarmingChatParser {
 	private static final Pattern SACK_WITHDRAWAL = Pattern.compile("^Moved (?<amount>[\\d,]+) (?<item>.+) from your Sacks to your inventory\\.$");
 	// One line of the hover text of a [Sacks] message:   +1,234 Wheat (Agronomy Sack)
 	private static final Pattern SACK_CHANGE = Pattern.compile("^\\s*(?<delta>[+-][\\d,]+) (?<item>.+?) \\([^()]+\\)\\s*$");
+	// The end of a [Sacks] message: (Last 5s.)
+	private static final Pattern SACK_PERIOD = Pattern.compile("\\(Last (?<seconds>\\d{1,4})s\\.\\)");
+	/** For a [Sacks] message that does not say how far back it goes. */
+	private static final int DEFAULT_SACK_PERIOD_SECONDS = 10;
 
 	public record NpcSale(String item, long count, double coins) {
 	}
@@ -67,6 +71,12 @@ public final class FarmingChatParser {
 
 	public static boolean isSackMessage(String message) {
 		return message.startsWith("[Sacks]");
+	}
+
+	/** How many seconds back the changes of a [Sacks] message go, which it says at its end. */
+	public static int sackMessageSeconds(String message) {
+		Matcher matcher = SACK_PERIOD.matcher(message);
+		return matcher.find() ? Integer.parseInt(matcher.group("seconds")) : DEFAULT_SACK_PERIOD_SECONDS;
 	}
 
 	/** Reads the item list Hypixel shows when hovering over a [Sacks] message. */

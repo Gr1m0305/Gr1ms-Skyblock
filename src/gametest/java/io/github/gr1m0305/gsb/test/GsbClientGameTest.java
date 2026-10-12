@@ -32,6 +32,7 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.inventory.ContainerScreen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.PlayerInfo;
@@ -43,6 +44,8 @@ import net.minecraft.network.chat.Style;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.resources.Identifier;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
@@ -178,6 +181,32 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			check(trackerLines.stream().noneMatch(line -> line.contains("Seeds")), "items removed from the sacks are not counted");
 			check(trackerLines.contains("Pests killed: 1"), "pest kill");
 			check(trackerLines.contains("Sold to NPC: 20,480 coins"), "npc sale");
+
+			// Crops in the sacks that get compacted turn into what they became, they are not counted on top of it.
+			sendChat(context, Component.literal("[Sacks] ")
+					.append(hovering("+1 item", "Added items:\n  +1 Enchanted Wheat (Enchanted Agronomy Sack)"))
+					.append(Component.literal(", "))
+					.append(hovering("-160 items", "Removed items:\n  -160 Wheat (Agronomy Sack)"))
+					.append(Component.literal(". (Last 5s.)")));
+			waitForTrackerRefresh(context);
+			List<String> compacted = lines(context, tracker());
+			System.out.println("[GSB test] tracker lines after compacting: " + compacted);
+			check(compacted.stream().anyMatch(line -> line.startsWith("1,074x|") && line.contains("Wheat")), "160 of the 1,234 wheat were used up");
+			check(compacted.stream().anyMatch(line -> line.startsWith("1x|") && line.contains("Wheat")), "one enchanted wheat was made of them");
+
+			// What leaves the sacks while a menu of the server is open was sold or moved, it is not gone.
+			context.setScreen(() -> {
+				Inventory inventory = Minecraft.getInstance().player.getInventory();
+				return new ContainerScreen(ChestMenu.threeRows(0, inventory), inventory, Component.literal("Bazaar"));
+			});
+			context.waitTicks(5);
+			sendChat(context, Component.literal("[Sacks] ")
+					.append(hovering("-1,000 items", "Removed items:\n  -1,000 Wheat (Agronomy Sack)"))
+					.append(Component.literal(". (Last 5s.)")));
+			context.setScreen(() -> null);
+			waitForTrackerRefresh(context);
+			check(lines(context, tracker()).stream().anyMatch(line -> line.startsWith("1,074x|")), "selling from the sacks took wheat out of the tracker: "
+					+ lines(context, tracker()));
 
 			// A few seconds after the last sign of farming the tracker pauses, which it shows right away.
 			context.waitFor(minecraft -> text(tracker().lines()).getLast().endsWith("(Paused)"), 200);
@@ -476,6 +505,11 @@ public class GsbClientGameTest implements FabricClientGameTest {
 		List<HudLine> before = context.computeOnClient(minecraft -> tracker().lines());
 		context.waitFor(minecraft -> tracker().lines() != before, 1200);
 		return context.computeOnClient(minecraft -> tracker().lines());
+	}
+
+	/** A part of a chat message that shows more text when the mouse is over it, which is where [Sacks] messages list their items. */
+	private static Component hovering(String text, String hoverText) {
+		return Component.literal(text).setStyle(Style.EMPTY.withHoverEvent(new HoverEvent.ShowText(Component.literal(hoverText))));
 	}
 
 	private static void sendChat(ClientGameTestContext context, Component message) {
