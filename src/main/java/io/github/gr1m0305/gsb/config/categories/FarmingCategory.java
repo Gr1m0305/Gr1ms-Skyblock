@@ -89,11 +89,19 @@ public class FarmingCategory {
 	}
 
 	public static class PestCooldown {
+		private static final float MIN_ALERT_SECONDS = 0.5f;
+		private static final float MAX_ALERT_SECONDS = 10f;
+
 		@Expose
-		@ConfigOption(name = "Enabled", desc = "Dings and shows \"Pest Cooldown\" on your screen for a second when the pest cooldown runs out.\n"
+		@ConfigOption(name = "Enabled", desc = "Dings and shows \"Pest Cooldown\" on your screen when the pest cooldown runs out.\n"
 				+ "§eReads the cooldown from the Pests widget of the tab list.")
 		@ConfigEditorBoolean
 		public boolean enabled = false;
+
+		@Expose
+		@ConfigOption(name = "Alert Time", desc = "How many seconds the alert stays on your screen and keeps dinging.")
+		@ConfigEditorSlider(minValue = MIN_ALERT_SECONDS, maxValue = MAX_ALERT_SECONDS, minStep = 0.5f)
+		public float alertSeconds = 2f;
 
 		@ConfigOption(name = "Test Alert", desc = "Closes this menu and plays the alert once, to check how it looks and sounds.")
 		@ConfigEditorButton(buttonText = "Test")
@@ -147,6 +155,9 @@ public class FarmingCategory {
 		}
 
 		profitTracker.itemsShown = Math.clamp(profitTracker.itemsShown, 1, 30);
+		// The number can also be typed into the box next to the slider, where anything goes.
+		pestCooldown.alertSeconds = Float.isNaN(pestCooldown.alertSeconds) ? 2f
+				: Math.clamp(pestCooldown.alertSeconds, PestCooldown.MIN_ALERT_SECONDS, PestCooldown.MAX_ALERT_SECONDS);
 		profitTracker.position.sanitize();
 		statTracker.position.sanitize();
 		pestCooldown.position.sanitize();

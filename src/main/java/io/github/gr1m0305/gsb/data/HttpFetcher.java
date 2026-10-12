@@ -15,8 +15,18 @@ import java.util.concurrent.Executors;
 import java.util.function.Function;
 import java.util.zip.GZIPInputStream;
 
-/** Downloads JSON from the public Hypixel API off the game thread. */
+/** Downloads JSON from public APIs off the game thread. */
 final class HttpFetcher {
+	/** The server answered, but not with what was asked for. */
+	static final class StatusException extends IOException {
+		final int status;
+
+		StatusException(int status, String url) {
+			super("HTTP " + status + " from " + url);
+			this.status = status;
+		}
+	}
+
 	static final ExecutorService EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
 		Thread thread = new Thread(runnable, "Gr1msSkyblock-Data");
 		thread.setDaemon(true);
@@ -41,7 +51,7 @@ final class HttpFetcher {
 
 		try (InputStream body = response.body()) {
 			if (response.statusCode() != 200) {
-				throw new IOException("HTTP " + response.statusCode() + " from " + url);
+				throw new StatusException(response.statusCode(), url);
 			}
 
 			boolean gzip = response.headers().firstValue("Content-Encoding").orElse("").equalsIgnoreCase("gzip");

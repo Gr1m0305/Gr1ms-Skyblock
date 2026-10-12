@@ -114,16 +114,28 @@ class PestCooldownTest {
 	}
 
 	@Test
-	void theAlertLastsOneSecondWithFiveDings() {
+	void theAlertDingsForAsLongAsItLasts() {
 		AlertPlayback playback = new AlertPlayback();
 		assertFalse(playback.isActive());
 		assertFalse(playback.tick());
 
-		playback.start();
+		// 20 ticks are one second.
+		assertEquals(List.of(0, 4, 8, 12, 16), dingTicks(playback, 1f, 20));
+		assertEquals(List.of(0, 4, 8, 12, 16, 20, 24, 28, 32, 36), dingTicks(playback, 2f, 40));
+		assertEquals(List.of(0, 4, 8), dingTicks(playback, 0.5f, 10));
+		// Nothing the slider's text box takes can make an alert that never shows or never ends.
+		assertEquals(List.of(0), dingTicks(playback, 0f, 1));
+		assertEquals(List.of(0), dingTicks(playback, -3f, 1));
+		assertEquals(List.of(0), dingTicks(playback, Float.NaN, 1));
+	}
+
+	/** Plays an alert to its end and returns the ticks it dinged in. */
+	private static List<Integer> dingTicks(AlertPlayback playback, float seconds, int expectedTicks) {
+		playback.start(seconds);
 		List<Integer> dings = new ArrayList<>();
 		int activeTicks = 0;
 
-		for (int tick = 0; tick < 40; tick++) {
+		for (int tick = 0; tick < 400; tick++) {
 			if (playback.isActive()) {
 				activeTicks++;
 			}
@@ -133,9 +145,8 @@ class PestCooldownTest {
 			}
 		}
 
-		// 20 ticks are one second.
-		assertEquals(20, activeTicks);
-		assertEquals(List.of(0, 4, 8, 12, 16), dings);
+		assertEquals(expectedTicks, activeTicks);
 		assertFalse(playback.isActive());
+		return dings;
 	}
 }

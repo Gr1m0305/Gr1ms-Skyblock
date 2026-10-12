@@ -140,6 +140,33 @@ class FarmingTrackerLogicTest {
 	}
 
 	@Test
+	void pausesAfterAFewSecondsWithoutFarming() {
+		// Nothing was farmed yet.
+		assertTrue(logic.isPaused(1_000));
+
+		logic.tick(1_000, 50, true);
+		assertFalse(logic.isPaused(1_000));
+		assertFalse(logic.isPaused(1_000 + FarmingTrackerLogic.IDLE_TIMEOUT_MILLIS));
+		assertTrue(logic.isPaused(1_001 + FarmingTrackerLogic.IDLE_TIMEOUT_MILLIS));
+		assertTrue(FarmingTrackerLogic.IDLE_TIMEOUT_MILLIS <= 5_000, "a few seconds, not more");
+
+		// Killing a pest, an item coming in and holding the mouse button all end the pause.
+		logic.pestKilled(20_000);
+		assertFalse(logic.isPaused(20_000));
+		assertTrue(logic.isPaused(40_000));
+		logic.inventoryChanged("CROPIE", 1, 40_000);
+		assertFalse(logic.isPaused(40_000));
+		assertTrue(logic.isPaused(60_000));
+		logic.tick(60_000, 50, true);
+		assertFalse(logic.isPaused(60_000));
+
+		// Items leaving the inventory and selling to an NPC are no farming.
+		logic.inventoryChanged("CROPIE", -1, 80_000);
+		logic.soldToNpc(100, 1);
+		assertTrue(logic.isPaused(80_000));
+	}
+
+	@Test
 	void profitPerHourUsesTheUptime() {
 		logic.inventoryChanged("CROPIE", 4, 1_000);
 		logic.data().uptimeMillis = 30 * 60 * 1000;

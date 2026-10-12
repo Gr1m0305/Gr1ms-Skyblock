@@ -5,6 +5,7 @@ import java.util.List;
 import com.google.gson.annotations.Expose;
 import io.github.gr1m0305.gsb.GrimsSkyblock;
 import io.github.gr1m0305.gsb.config.categories.FarmingCategory;
+import io.github.gr1m0305.gsb.config.categories.GeneralCategory;
 import io.github.gr1m0305.gsb.config.categories.GuiCategory;
 import io.github.notenoughupdates.moulconfig.Config;
 import io.github.notenoughupdates.moulconfig.Social;
@@ -19,6 +20,10 @@ public class GsbConfig extends Config {
 	@Expose
 	@Category(name = "GUI", desc = "Change where this mod draws things on your screen.")
 	public GuiCategory gui = new GuiCategory();
+
+	@Expose
+	@Category(name = "General", desc = "Features that are there everywhere on SkyBlock.")
+	public GeneralCategory general = new GeneralCategory();
 
 	@Expose
 	@Category(name = "Farming", desc = "Features for farming on the Garden.")
@@ -45,10 +50,15 @@ public class GsbConfig extends Config {
 			gui = new GuiCategory();
 		}
 
+		if (general == null) {
+			general = new GeneralCategory();
+		}
+
 		if (farming == null) {
 			farming = new FarmingCategory();
 		}
 
+		general.sanitize();
 		farming.sanitize();
 	}
 }

@@ -40,6 +40,17 @@ public final class ItemIcons {
 	}
 
 	/**
+	 * A player head.
+	 *
+	 * @param skin the texture of the head, the way player profiles store it
+	 */
+	public static ItemStack head(String skin) {
+		ItemStack stack = new ItemStack(Items.PLAYER_HEAD);
+		stack.set(DataComponents.PROFILE, profile(skin));
+		return stack;
+	}
+
+	/**
 	 * What a SkyBlock item looks like, as far as the Hypixel API says.
 	 *
 	 * @param info the item, or null for one that is not in the item list

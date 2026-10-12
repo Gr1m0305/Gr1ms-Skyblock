@@ -53,6 +53,15 @@ class FarmingCategoryTest {
 	}
 
 	@Test
+	void thePestCooldownAlertLastsTwoSecondsUnlessChanged() {
+		assertEquals(2f, load("{}").pestCooldown.alertSeconds);
+		assertEquals(4.5f, load("{\"pestCooldown\":{\"alertSeconds\":4.5}}").pestCooldown.alertSeconds);
+		// What a config file edited by hand can hold.
+		assertEquals(0.5f, load("{\"pestCooldown\":{\"alertSeconds\":0}}").pestCooldown.alertSeconds);
+		assertEquals(10f, load("{\"pestCooldown\":{\"alertSeconds\":3600}}").pestCooldown.alertSeconds);
+	}
+
+	@Test
 	void repairsAStatListEditedByHand() {
 		FarmingCategory farming = load("""
 				{"statTracker":{"stats":["SPEED","NOT_A_STAT","YAW","SPEED"]}}""");

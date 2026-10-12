@@ -25,6 +25,14 @@ public final class HudRenderer {
 	private static final int LINE_GAP = 2;
 	private static final int COLUMN_GAP = 6;
 
+	private static final int BAR_WIDTH = 100;
+	private static final int BAR_HEIGHT = 12;
+	private static final int BAR_FILL = 0xFFFFAA00;
+	private static final int BAR_BACKGROUND = 0xF0101010;
+	/** Where the text on a bar starts, counted from the top left corner of the bar. */
+	private static final int BAR_TEXT_X = 3;
+	private static final int BAR_TEXT_Y = 2;
+
 	// Where things are in a panel, counted from its top left corner.
 	private static final int PANEL_LEFT = 4;
 	private static final int PANEL_RIGHT = 6;
@@ -86,7 +94,7 @@ public final class HudRenderer {
 
 		for (HudLine line : lines) {
 			int textWidth = line.isRow() ? tableWidth : line.cells().isEmpty() ? 0 : font.width(line.cells().getFirst());
-			width = Math.max(width, textX(line, panel) + textWidth);
+			width = Math.max(width, textX(line, panel) + Math.max(textWidth, line.bar() != null ? BAR_WIDTH : 0));
 			height += lineHeight(font, line) + LINE_GAP;
 		}
 
@@ -113,7 +121,9 @@ public final class HudRenderer {
 	}
 
 	private static int lineHeight(Font font, HudLine line) {
-		return line.icon() != null ? ICON_SIZE : font.lineHeight;
+		// A bar sits below the text of its line, with a pixel of air under it.
+		int textHeight = line.bar() != null ? font.lineHeight + LINE_GAP + BAR_HEIGHT + 1 : font.lineHeight;
+		return line.icon() != null ? Math.max(ICON_SIZE, textHeight) : textHeight;
 	}
 
 	/** Draws the lines with their top left corner at {@code x}, {@code y}. */
@@ -130,11 +140,18 @@ public final class HudRenderer {
 		}
 
 		for (HudLine line : lines) {
+			int height = lineHeight(font, line);
 			int textX = textX(line, panel);
 			int textY = lineY;
 
 			if (line.icon() != null) {
-				graphics.fakeItem(line.icon(), textX - ICON_GAP - ICON_SIZE, lineY);
+				graphics.fakeItem(line.icon(), textX - ICON_GAP - ICON_SIZE, lineY + (height - ICON_SIZE) / 2);
+			}
+
+			if (line.bar() != null) {
+				drawBar(graphics, font, line.bar(), textX, lineY + font.lineHeight + LINE_GAP);
+			} else if (line.icon() != null) {
+				// Text on its own is centred next to the icon, text above a bar starts at the top.
 				textY += (ICON_SIZE - LETTER_HEIGHT) / 2;
 			}
 
@@ -147,10 +164,18 @@ public final class HudRenderer {
 				}
 			}
 
-			lineY += lineHeight(font, line) + LINE_GAP;
+			lineY += height + LINE_GAP;
 		}
 
 		graphics.pose().popMatrix();
+	}
+
+	private static void drawBar(GuiGraphicsExtractor graphics, Font font, HudLine.Bar bar, int x, int y) {
+		int filled = Math.round(BAR_WIDTH * bar.progress());
+		graphics.fill(x + filled, y, x + BAR_WIDTH, y + BAR_HEIGHT, BAR_BACKGROUND);
+		graphics.fill(x, y, x + filled, y + BAR_HEIGHT, BAR_FILL);
+		// The text lies on both colours of the bar, so it always has its shadow.
+		graphics.text(font, bar.text(), x + BAR_TEXT_X, y + BAR_TEXT_Y, WHITE, true);
 	}
 
 	private static void drawPanel(GuiGraphicsExtractor graphics, Font font, Layout layout) {

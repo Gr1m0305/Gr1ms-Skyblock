@@ -62,6 +62,7 @@ public final class FarmingProfitTracker {
 	private long linesBuiltAt;
 	private PriceSource linesPriceSource;
 	private int linesItemsShown;
+	private boolean linesPaused;
 	private long lastTick = System.currentTimeMillis();
 	private long lastSave = System.currentTimeMillis();
 	private long farmingWithoutGainMillis;
@@ -230,7 +231,7 @@ public final class FarmingProfitTracker {
 		return config.get().priceSource.price(items.get(id), bazaar.get(id));
 	}
 
-	private List<HudLine> buildLines() {
+	private List<HudLine> buildLines(boolean paused) {
 		FarmingTrackerLogic.Summary summary = logic.summarize(this::priceOf, config.get().itemsShown);
 		List<HudLine> result = new ArrayList<>();
 
@@ -252,7 +253,7 @@ public final class FarmingProfitTracker {
 			result.add(HudLine.of("§7+ " + summary.hiddenItems() + " more: §6" + NumberFormats.compact(summary.hiddenValue())));
 		}
 
-		addTotals(result, summary.pestsKilled(), summary.npcCoins(), summary.totalProfit(), summary.profitPerHour(), summary.uptimeMillis());
+		addTotals(result, summary.pestsKilled(), summary.npcCoins(), summary.totalProfit(), summary.profitPerHour(), summary.uptimeMillis(), paused);
 		return result;
 	}
 
@@ -260,12 +261,13 @@ public final class FarmingProfitTracker {
 		return HudLine.row("§f" + NumberFormats.grouped(count) + "x", "§" + rarityColor + name, "§6" + NumberFormats.compact(value)).withIcon(icon);
 	}
 
-	private static void addTotals(List<HudLine> result, long pestsKilled, double npcCoins, double totalProfit, double profitPerHour, long uptimeMillis) {
+	private static void addTotals(List<HudLine> result, long pestsKilled, double npcCoins, double totalProfit, double profitPerHour, long uptimeMillis,
+			boolean paused) {
 		result.add(HudLine.of("§fPests killed: §e" + NumberFormats.grouped(pestsKilled)));
 		result.add(HudLine.of("§fSold to NPC: §6" + NumberFormats.grouped(npcCoins) + " coins"));
 		result.add(HudLine.of("§fTotal Profit: §6" + NumberFormats.grouped(totalProfit) + " coins"));
 		result.add(HudLine.of("§fProfit Per Hour: §6" + NumberFormats.grouped(profitPerHour) + " coins"));
-		result.add(HudLine.of("§fTotal Uptime: §e" + NumberFormats.duration(uptimeMillis)));
+		result.add(HudLine.of("§fTotal Uptime: §e" + NumberFormats.duration(uptimeMillis) + (paused ? " §c(Paused)" : "")));
 	}
 
 	/** Made-up numbers, so the GUI editor shows the tracker at a realistic size before anything was farmed. */
@@ -277,7 +279,7 @@ public final class FarmingProfitTracker {
 		result.add(itemRow(ItemIcons.glowing(Items.CARROT), 59_783, 'a', "Ench Carrot", 28_695_840));
 		result.add(itemRow(ItemIcons.glowing(Items.POTATO), 61_769, 'a', "Ench Potato", 29_649_120));
 		result.add(itemRow(ItemIcons.of(Items.PAPER), 84, '6', "Overclocker 3000", 21_000_000));
-		addTotals(result, 4_383, 52_480_000, 186_597_600, 14_083_123, 47_700_000);
+		addTotals(result, 4_383, 52_480_000, 186_597_600, 14_083_123, 47_700_000, false);
 		return result;
 	}
 
@@ -307,12 +309,15 @@ public final class FarmingProfitTracker {
 			FarmingCategory.ProfitTracker settings = config.get();
 			// A changed setting should show right away, not seconds later.
 			boolean settingsChanged = settings.priceSource != linesPriceSource || settings.itemsShown != linesItemsShown;
+			// So should pausing, and above all that the tracker runs again once farming goes on.
+			boolean paused = logic.isPaused(now);
 
-			if (settingsChanged || now - linesBuiltAt >= LINE_REFRESH_MILLIS) {
+			if (settingsChanged || paused != linesPaused || now - linesBuiltAt >= LINE_REFRESH_MILLIS) {
 				linesBuiltAt = now;
 				linesPriceSource = settings.priceSource;
 				linesItemsShown = settings.itemsShown;
-				lines = buildLines();
+				linesPaused = paused;
+				lines = buildLines(paused);
 			}
 
 			return lines;

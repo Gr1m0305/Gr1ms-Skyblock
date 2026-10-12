@@ -20,8 +20,8 @@ public final class FarmingTrackerLogic {
 	static final long SACK_INSERT_LIFETIME_MILLIS = 60_000;
 	/** How far apart the "Moved ... from your Sacks" message and the inventory update may be. */
 	static final long SACK_WITHDRAWAL_WINDOW_MILLIS = 3_000;
-	/** The uptime keeps counting for this long after the last sign of farming. */
-	static final long IDLE_TIMEOUT_MILLIS = 10_000;
+	/** The tracker pauses after this long without a sign of farming. Short breaks, like typing a command, are below it. */
+	static final long IDLE_TIMEOUT_MILLIS = 5_000;
 
 	public record ItemRow(String id, long count, double value) {
 	}
@@ -167,10 +167,18 @@ public final class FarmingTrackerLogic {
 			lastActivity = now;
 		}
 
-		if (now - lastActivity <= IDLE_TIMEOUT_MILLIS) {
+		if (!isPaused(now)) {
 			data.uptimeMillis += elapsedMillis;
 			dirty = true;
 		}
+	}
+
+	/**
+	 * Whether there was no sign of farming for a few seconds. The uptime stands still then, and with it the
+	 * profit per hour. Items are still counted, the last crops reach the sacks after the player stopped.
+	 */
+	public boolean isPaused(long now) {
+		return now - lastActivity > IDLE_TIMEOUT_MILLIS;
 	}
 
 	/** Milliseconds since an item was last counted. */

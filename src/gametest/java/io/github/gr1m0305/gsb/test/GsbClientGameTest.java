@@ -2,6 +2,8 @@ package io.github.gr1m0305.gsb.test;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -12,6 +14,7 @@ import io.github.gr1m0305.gsb.GrimsSkyblock;
 import io.github.gr1m0305.gsb.compat.GameCompat;
 import io.github.gr1m0305.gsb.config.ConfigManager;
 import io.github.gr1m0305.gsb.config.categories.FarmingCategory;
+import io.github.gr1m0305.gsb.config.categories.GeneralCategory;
 import io.github.gr1m0305.gsb.data.ItemInfo;
 import io.github.gr1m0305.gsb.data.LegacyMaterials;
 import io.github.gr1m0305.gsb.features.farming.FarmingStat;
@@ -27,6 +30,7 @@ import io.github.notenoughupdates.moulconfig.platform.MoulConfigScreenComponent;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
+import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.multiplayer.ClientPacketListener;
@@ -59,6 +63,7 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			minecraft.getSoundManager().addListener((sound, soundSet, range) -> sounds.add(sound.getIdentifier().toString()));
 			// Start from the settings of a fresh install, whatever an earlier run left in the config file.
 			GrimsSkyblock.get().config().get().farming = new FarmingCategory();
+			GrimsSkyblock.get().config().get().general = new GeneralCategory();
 			GrimsSkyblock.get().farmingTracker().reset();
 		});
 
@@ -69,8 +74,18 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			check(!SkyblockState.onGarden(), "a normal world must not count as the Garden");
 			check(!tracker().isVisible() && !stats().isVisible(), "nothing is shown outside of the Garden");
 			checkIcons(context);
+			GeneralCategory.PetDisplay petSettings = GrimsSkyblock.get().config().get().general.petDisplay;
+			check(!petSettings.enabled && !pet().isVisible(), "the pet display is off by default");
+			context.runOnClient(minecraft -> petSettings.enabled = true);
+			check(!SkyblockState.onSkyblock() && !pet().isVisible(), "the pet display is not shown away from SkyBlock");
 
-			context.runOnClient(minecraft -> addTabLines(minecraft, "Area: Garden", "Stats:", " Speed: ✦400", " Farming Fortune: ☘1203", " Wheat Fortune: ☘521"));
+			PlayerInfo areaLine = context.computeOnClient(minecraft ->
+					addTabLines(minecraft, "Area: Garden", "Stats:", " Speed: ✦400", " Farming Fortune: ☘1203", " Wheat Fortune: ☘521").getFirst());
+			// Hypixel colours the name of a pet by its rarity, gold is legendary.
+			List<PlayerInfo> petLines = context.computeOnClient(minecraft -> addTabLines(minecraft, Component.literal("Pet:"),
+					Component.literal(" ").append(Component.literal("[Lvl 87] ").withStyle(ChatFormatting.GRAY)).append(Component.literal("Mooshroom Cow").withStyle(ChatFormatting.GOLD)),
+					Component.literal(" Yellow Bandana"),
+					Component.literal(" 153,251.5/250k XP (61.3%)")));
 			// The inventory is not watched for a few seconds after joining a world.
 			context.waitTicks(120);
 			check(SkyblockState.onGarden(), "the Area line of the tab list puts the player on the Garden");
@@ -89,6 +104,25 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			check("Farming Profit Tracker".equals(tracker().title()) && "Farming Stats".equals(stats().title()), "both are panels with a title");
 			check(alert().title() == null, "the alert is bare text");
 
+			// The pet display has the pet of the tab list with a bar for the way to its next level.
+			check(SkyblockState.onSkyblock() && pet().isVisible() && "Pet".equals(pet().title()), "the pet display is shown on SkyBlock");
+			check(lines(context, pet()).equals(List.of("[Lvl 87] Mooshroom Cow")), "pet line was " + lines(context, pet()));
+			HudLine petLine = context.computeOnClient(minecraft -> pet().lines().getFirst());
+			check(petLine.bar() != null && Math.abs(petLine.bar().progress() - 0.613f) < 0.0001f && petLine.bar().text().getString().equals("61.3%"),
+					"the bar of the pet was " + petLine.bar());
+			check(petLine.cells().getFirst().getSiblings().stream().anyMatch(part -> part.getString().equals("Mooshroom Cow")
+					&& part.getStyle().getColor() != null && part.getStyle().getColor().getValue() == 0xFFAA00), "the name of the pet has the colour of its rarity");
+			// The picture of the pet is downloaded, which only works with a connection to the internet.
+			long pictureWaitUntil = System.nanoTime() + 15_000_000_000L;
+
+			while (System.nanoTime() < pictureWaitUntil && !context.computeOnClient(minecraft -> pet().lines().getFirst().icon().is(Items.PLAYER_HEAD))) {
+				context.waitTicks(5);
+			}
+
+			ItemStack petIcon = context.computeOnClient(minecraft -> pet().lines().getFirst().icon());
+			System.out.println("[GSB test] the pet is drawn as " + petIcon.getItem() + (petIcon.has(DataComponents.PROFILE) ? " with a texture" : ""));
+			check(petIcon.is(Items.BONE) || petIcon.has(DataComponents.PROFILE), "the pet is a bone or a head with its texture");
+
 			// The stat tracker shows the stats picked in the config, in that order.
 			List<String> defaultStats = statLines(context);
 			check(defaultStats.equals(List.of("Total Fortune: ☘1,724", "Speed: ✦400", "Yaw: -141.15", "Pitch: 3.30")), "default stats were " + defaultStats);
@@ -104,7 +138,7 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			context.runOnClient(minecraft -> picked.clear());
 			check(lines(context, stats()).equals(List.of("No stats picked, add some in /gsb")), "without stats: " + lines(context, stats()));
 			context.runOnClient(minecraft -> picked.addAll(List.of(FarmingStat.values())));
-			context.waitTicks(2);
+			context.waitTicks(20);
 			context.takeScreenshot("0-all-stats");
 			context.runOnClient(minecraft -> {
 				picked.clear();
@@ -145,8 +179,14 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			check(trackerLines.contains("Pests killed: 1"), "pest kill");
 			check(trackerLines.contains("Sold to NPC: 20,480 coins"), "npc sale");
 
+			// A few seconds after the last sign of farming the tracker pauses, which it shows right away.
+			context.waitFor(minecraft -> text(tracker().lines()).getLast().endsWith("(Paused)"), 200);
+			System.out.println("[GSB test] the tracker paused: " + lines(context, tracker()).getLast());
+			shown = context.computeOnClient(minecraft -> tracker().lines());
+
 			// However often it is drawn, the text changes no more than once every three seconds.
 			List<Long> refreshTimes = new ArrayList<>();
+			Set<String> uptimesWhilePaused = new HashSet<>();
 			long watchUntil = System.nanoTime() + 7_500_000_000L;
 
 			while (System.nanoTime() < watchUntil) {
@@ -156,6 +196,7 @@ public class GsbClientGameTest implements FabricClientGameTest {
 				if (now != shown) {
 					shown = now;
 					refreshTimes.add(System.nanoTime() / 1_000_000);
+					uptimesWhilePaused.add(text(now).getLast());
 				}
 			}
 
@@ -169,6 +210,13 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			}
 
 			context.takeScreenshot("1-hud");
+
+			// The uptime stood still all that time, and holding the mouse button to farm on ends the pause at once.
+			check(uptimesWhilePaused.size() == 1 && uptimesWhilePaused.iterator().next().endsWith("(Paused)"), "the uptime while paused was " + uptimesWhilePaused);
+			context.getInput().holdMouse(0);
+			context.waitTicks(3);
+			check(!lines(context, tracker()).getLast().contains("Paused"), "farming on did not end the pause: " + lines(context, tracker()).getLast());
+			context.getInput().releaseMouse(0);
 
 			// The pest cooldown runs out. With only seconds left, the mod counts them down itself.
 			check(lines(context, alert()).isEmpty() && !alert().isVisible(), "no alert while nothing happened");
@@ -184,8 +232,8 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			context.waitFor(minecraft -> !alert().isVisible(), 400);
 			long alertShownFor = (System.nanoTime() - alertStarted) / 1_000_000;
 			System.out.println("[GSB test] alert was shown for " + alertShownFor + " ms with " + dings(sounds) + " dings");
-			check(alertShownFor >= 800 && alertShownFor <= 2500, "the alert was shown for " + alertShownFor + " ms");
-			check(dings(sounds) == 5, "the alert played " + dings(sounds) + " dings");
+			check(alertShownFor >= 1800 && alertShownFor <= 3500, "the alert was shown for " + alertShownFor + " ms");
+			check(dings(sounds) == 10, "the alert played " + dings(sounds) + " dings");
 
 			// A new cooldown starts, and this time the tab list is what says it is over.
 			sounds.clear();
@@ -195,10 +243,10 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			context.runOnClient(minecraft -> cooldownLine.setTabListDisplayName(Component.literal(" Cooldown: READY")));
 			context.waitFor(minecraft -> alert().isVisible(), 100);
 			context.waitFor(minecraft -> !alert().isVisible(), 400);
-			check(dings(sounds) == 5, "the alert for READY played " + dings(sounds) + " dings");
+			check(dings(sounds) == 10, "the alert for READY played " + dings(sounds) + " dings");
 			// READY staying on the tab list is not a new alert.
 			context.waitTicks(40);
-			check(!alert().isVisible() && dings(sounds) == 5, "the alert only plays once");
+			check(!alert().isVisible() && dings(sounds) == 10, "the alert only plays once");
 
 			// The elements stay visible on top of inventories.
 			context.setScreen(() -> new InventoryScreen(Minecraft.getInstance().player));
@@ -222,6 +270,11 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			context.runOnClient(minecraft -> showOption(FarmingCategory.StatTracker.class, "stats"));
 			context.waitTicks(20);
 			context.takeScreenshot("4-config-stat-tracker");
+
+			// The pet display is not a farming feature and has a category of its own.
+			context.runOnClient(minecraft -> showOption(GeneralCategory.class, "petDisplay"));
+			context.waitTicks(20);
+			context.takeScreenshot("4-config-general");
 
 			// The GitHub button sits in the top right corner of the menu. Only hover it, clicking would open a browser.
 			check(GrimsSkyblock.get().config().get().getSocials().size() == 1, "the menu has the GitHub button");
@@ -250,7 +303,17 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			check(context.computeOnClient(minecraft -> GameCompat.screen(minecraft) == null), "the test button closes the menu");
 			check(alert().isVisible(), "the test button shows the alert");
 			context.waitFor(minecraft -> !alert().isVisible(), 400);
-			check(dings(sounds) == 5, "the test alert played " + dings(sounds) + " dings");
+			check(dings(sounds) == 10, "the test alert played " + dings(sounds) + " dings");
+
+			// The slider changes how long the alert lasts.
+			sounds.clear();
+			context.runOnClient(minecraft -> {
+				GrimsSkyblock.get().config().get().farming.pestCooldown.alertSeconds = 0.5f;
+				GrimsSkyblock.get().pestCooldownAlert().test();
+			});
+			context.waitFor(minecraft -> !alert().isVisible(), 400);
+			check(dings(sounds) == 3, "half a second of alert played " + dings(sounds) + " dings");
+			context.runOnClient(minecraft -> GrimsSkyblock.get().config().get().farming.pestCooldown.alertSeconds = 2f);
 			context.waitTicks(2);
 
 			// /gsb gui opens the editor, where elements can be dragged, resized and reset.
@@ -304,6 +367,35 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			check(afterReset.contains("Nothing farmed yet") && afterReset.contains("Pests killed: 0") && afterReset.contains("Sold to NPC: 0 coins"),
 					"tracker after reset: " + afterReset);
 			context.takeScreenshot("6-after-reset");
+
+			// Away from the Garden the farming elements go, the pet display stays.
+			context.runOnClient(minecraft -> areaLine.setTabListDisplayName(Component.literal("Area: Hub")));
+			context.waitTicks(10);
+			check(SkyblockState.onSkyblock() && !SkyblockState.onGarden(), "the Hub is SkyBlock, but not the Garden");
+			check(!tracker().isVisible() && !stats().isVisible() && pet().isVisible(), "only the pet display is shown in the Hub");
+			context.takeScreenshot("8-pet-in-the-hub");
+
+			// Where the tab list has no Pet widget the pet that was out stays on the screen.
+			context.runOnClient(minecraft -> petLines.getFirst().setTabListDisplayName(null));
+			context.waitTicks(10);
+			check(lines(context, pet()).equals(List.of("[Lvl 87] Mooshroom Cow")), "without the widget the pet line was " + lines(context, pet()));
+			context.runOnClient(minecraft -> {
+				petLines.getFirst().setTabListDisplayName(Component.literal("Pet:"));
+				petLines.get(1).setTabListDisplayName(Component.literal(" [Lvl 100] ").append(Component.literal("Elephant").withStyle(ChatFormatting.DARK_PURPLE)));
+				petLines.get(3).setTabListDisplayName(Component.literal(" MAX LEVEL"));
+			});
+			context.waitTicks(10);
+			HudLine maxedPet = context.computeOnClient(minecraft -> pet().lines().getFirst());
+			check(text(List.of(maxedPet)).equals(List.of("[Lvl 100] Elephant")) && maxedPet.bar() != null && maxedPet.bar().progress() == 1f
+					&& maxedPet.bar().text().getString().equals("MAX LEVEL"), "a pet at its highest level was " + text(List.of(maxedPet)) + " with " + maxedPet.bar());
+			context.takeScreenshot("9-pet-max-level");
+			context.runOnClient(minecraft -> {
+				petLines.get(1).setTabListDisplayName(Component.literal(" No pet selected"));
+				petLines.get(2).setTabListDisplayName(null);
+				petLines.get(3).setTabListDisplayName(null);
+			});
+			context.waitTicks(10);
+			check(lines(context, pet()).equals(List.of("No pet selected")), "without a pet the line was " + lines(context, pet()));
 		}
 	}
 
@@ -317,6 +409,10 @@ public class GsbClientGameTest implements FabricClientGameTest {
 
 	private static HudElement alert() {
 		return HudManager.elements().get(2);
+	}
+
+	private static HudElement pet() {
+		return HudManager.elements().get(3);
 	}
 
 	/** How many of the sounds that were played are the ding of the alert. */
@@ -386,15 +482,22 @@ public class GsbClientGameTest implements FabricClientGameTest {
 		context.runOnClient(minecraft -> minecraft.getConnection().handleSystemChat(new ClientboundSystemChatPacket(message, false)));
 	}
 
-	/** Hypixel fills the tab list with fake players whose display names are the lines of its widgets. */
-	@SuppressWarnings("unchecked")
 	private static List<PlayerInfo> addTabLines(Minecraft minecraft, String... lines) {
+		return addTabLines(minecraft, Arrays.stream(lines).map(Component::literal).toArray(Component[]::new));
+	}
+
+	/**
+	 * Hypixel fills the tab list with fake players whose display names are the lines of its widgets. The game
+	 * sorts them by their names, which is what puts the lines in order.
+	 */
+	@SuppressWarnings("unchecked")
+	private static List<PlayerInfo> addTabLines(Minecraft minecraft, Component... lines) {
 		Set<PlayerInfo> players = (Set<PlayerInfo>) readField(ClientPacketListener.class, "listedPlayers", minecraft.getConnection());
 		List<PlayerInfo> added = new ArrayList<>();
 
-		for (String line : lines) {
-			PlayerInfo player = new PlayerInfo(new GameProfile(UUID.randomUUID(), "!line" + players.size()), false);
-			player.setTabListDisplayName(Component.literal(line));
+		for (Component line : lines) {
+			PlayerInfo player = new PlayerInfo(new GameProfile(UUID.randomUUID(), String.format("!line%02d", players.size())), false);
+			player.setTabListDisplayName(line);
 			players.add(player);
 			added.add(player);
 		}

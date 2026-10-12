@@ -14,7 +14,7 @@ import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.sounds.SoundEvents;
 import org.jspecify.annotations.Nullable;
 
-/** Dings and shows big red text for a second when the pest cooldown on the Garden runs out. */
+/** Dings and shows big red text for a moment when the pest cooldown on the Garden runs out. */
 public final class PestCooldownAlert extends HudElement {
 	private static final List<HudLine> TEXT = List.of(HudLine.of("§c§lPest Cooldown"));
 
@@ -44,7 +44,7 @@ public final class PestCooldownAlert extends HudElement {
 			}
 
 			if (logic.tick(now) || ranOut) {
-				playback.start();
+				playback.start(config.get().alertSeconds);
 			}
 		}
 
@@ -56,7 +56,7 @@ public final class PestCooldownAlert extends HudElement {
 	/** Plays the alert once, to check how it looks and sounds. Closes the menu so the text can be seen. */
 	public void test() {
 		GameCompat.setScreen(Minecraft.getInstance(), null);
-		playback.start();
+		playback.start(config.get().alertSeconds);
 	}
 
 	/** The alert is nothing but its big red text. */
