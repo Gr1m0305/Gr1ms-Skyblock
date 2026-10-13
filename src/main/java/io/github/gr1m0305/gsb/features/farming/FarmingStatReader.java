@@ -52,6 +52,7 @@ public final class FarmingStatReader {
 			case CROP_FORTUNE -> fortune.filter(value -> value.crop() != null).map(value -> fortune(value.cropFortune()));
 			case SPEED -> widgetValue("Speed");
 			case BONUS_PEST_CHANCE -> widgetValue("Bonus Pest Chance");
+			case OVERBLOOM -> widgetValue("Overbloom");
 			case FARMING_WISDOM -> widgetValue("Farming Wisdom");
 			// The Pests widget only calls it "Cooldown".
 			case PEST_COOLDOWN -> widgetValue("Cooldown");

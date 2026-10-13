@@ -9,6 +9,7 @@ import com.google.gson.annotations.Expose;
 import com.google.gson.annotations.SerializedName;
 import io.github.gr1m0305.gsb.GrimsSkyblock;
 import io.github.gr1m0305.gsb.data.PriceSource;
+import io.github.gr1m0305.gsb.features.farming.FarmingProfitStat;
 import io.github.gr1m0305.gsb.features.farming.FarmingStat;
 import io.github.gr1m0305.gsb.gui.Position;
 import io.github.notenoughupdates.moulconfig.annotations.Accordion;
@@ -59,7 +60,13 @@ public class FarmingCategory {
 		@ConfigEditorSlider(minValue = 1, maxValue = 30, minStep = 1)
 		public int itemsShown = 10;
 
-		@ConfigOption(name = "Reset Tracker", desc = "Sets all items, coins and the uptime back to zero.\n§eAlso runs with /gsb resetfarming.")
+		@Expose
+		@ConfigOption(name = "Stats Shown", desc = "The stats below the items, from top to bottom. Drag them to change their order.\n"
+				+ "§eFarming XP is counted from the action bar, which has to show the XP as numbers and not as a percentage.")
+		@ConfigEditorDraggableList
+		public List<FarmingProfitStat> stats = new ArrayList<>(FarmingProfitStat.DEFAULTS);
+
+		@ConfigOption(name = "Reset Tracker", desc = "Sets all items, coins, the Farming XP and the uptime back to zero.\n§eAlso runs with /gsb resetfarming.")
 		@ConfigEditorButton(buttonText = "Reset")
 		public Runnable reset = () -> GrimsSkyblock.get().farmingTracker().reset();
 
@@ -167,12 +174,18 @@ public class FarmingCategory {
 			profitTracker.position = ProfitTracker.defaultPosition();
 		}
 
+		if (profitTracker.stats == null) {
+			profitTracker.stats = new ArrayList<>(FarmingProfitStat.DEFAULTS);
+		}
+
 		if (statTracker.stats == null) {
 			statTracker.stats = new ArrayList<>(FarmingStat.DEFAULTS);
 		}
 
 		// A stat this version does not know is read as null, and listing one twice makes no sense. The menu
-		// adds to and removes from this very list, so it has to be one that can change.
+		// adds to and removes from these very lists, so they have to be ones that can change.
+		profitTracker.stats = new ArrayList<>(new LinkedHashSet<>(profitTracker.stats));
+		profitTracker.stats.removeIf(Objects::isNull);
 		statTracker.stats = new ArrayList<>(new LinkedHashSet<>(statTracker.stats));
 		statTracker.stats.removeIf(Objects::isNull);
 

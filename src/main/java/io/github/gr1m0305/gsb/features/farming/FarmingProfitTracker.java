@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
 
@@ -33,13 +34,14 @@ import io.github.gr1m0305.gsb.util.StringUtil;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Tracks what farming on the Garden earns: the crops farmed, the drops of vacuumed pests and the coins
- * from selling items to NPCs.
+ * Tracks what farming on the Garden earns: the crops farmed, the drops of vacuumed pests, the coins
+ * from selling items to NPCs and the Farming XP.
  */
 public final class FarmingProfitTracker {
 	private static final long SAVE_INTERVAL_MILLIS = 60_000;
@@ -50,6 +52,7 @@ public final class FarmingProfitTracker {
 	private static final long SACK_HINT_AFTER_MILLIS = 120_000;
 	/** A "[Sacks]" message takes a moment to arrive, so it also covers a little more than the seconds it names. */
 	private static final long SACK_MESSAGE_MARGIN_MILLIS = 1_500;
+	private static final String XP_MISSING = "§cnot in action bar";
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
 	private final Supplier<FarmingCategory.ProfitTracker> config;
@@ -59,11 +62,14 @@ public final class FarmingProfitTracker {
 	private final FarmingTrackerLogic logic;
 	private final InventoryWatcher inventory = new InventoryWatcher();
 	private final Hud hud = new Hud();
+	private final Map<Item, ItemStack> icons = new HashMap<>();
 	private List<HudLine> lines = List.of();
 	private @Nullable List<HudLine> exampleLines;
+	private List<FarmingProfitStat> exampleStats = List.of();
 	private long linesBuiltAt;
 	private PriceSource linesPriceSource;
 	private int linesItemsShown;
+	private List<FarmingProfitStat> linesStats = List.of();
 	private boolean linesPaused;
 	private long lastTick = System.currentTimeMillis();
 	private long lastSave = System.currentTimeMillis();
@@ -101,6 +107,9 @@ public final class FarmingProfitTracker {
 			items.retryIfMissing();
 			bazaar.refreshIfOlderThan(BAZAAR_REFRESH_MILLIS);
 			checkSackMessages(now, elapsed, farmingInput);
+		} else {
+			// What is gained away from the Garden is not part of the tracker.
+			logic.farmingXpOutOfSight();
 		}
 
 		if (now - lastSave >= SAVE_INTERVAL_MILLIS) {
@@ -169,6 +178,13 @@ public final class FarmingProfitTracker {
 				.ifPresent(withdrawal -> logic.withdrawnFromSack(items.idFromName(withdrawal.item()), withdrawal.amount(), now));
 	}
 
+	/** Called for everything the server writes into the action bar, which on SkyBlock is several times per second. */
+	public void onActionBar(Component message) {
+		if (isTracking()) {
+			FarmingChatParser.parseFarmingXp(StringUtil.stripFormatting(message.getString())).ifPresent(logic::farmingXpShown);
+		}
+	}
+
 	/** The item list of a [Sacks] message is in the text shown when hovering over it. */
 	private static void collectHoverTexts(Component component, Set<String> texts) {
 		if (component.getStyle().getHoverEvent() instanceof HoverEvent.ShowText(Component value)) {
@@ -184,7 +200,7 @@ public final class FarmingProfitTracker {
 		FarmingTrackerData data = logic.data();
 
 		// One misclick should not cost days of data, the numbers from before the reset stay next to the file.
-		if (!data.items.isEmpty() || data.pestsKilled > 0 || data.npcCoins > 0 || data.uptimeMillis > 0) {
+		if (!data.items.isEmpty() || data.pestsKilled > 0 || data.npcCoins > 0 || data.farmingXp > 0 || data.uptimeMillis > 0) {
 			save();
 
 			try {
@@ -236,7 +252,7 @@ public final class FarmingProfitTracker {
 		return config.get().priceSource.price(items.get(id), bazaar.get(id));
 	}
 
-	private List<HudLine> buildLines(boolean paused) {
+	private List<HudLine> buildLines(List<FarmingProfitStat> stats, boolean paused) {
 		FarmingTrackerLogic.Summary summary = logic.summarize(this::priceOf, config.get().itemsShown);
 		List<HudLine> result = new ArrayList<>();
 
@@ -258,7 +274,7 @@ public final class FarmingProfitTracker {
 			result.add(HudLine.of("§7+ " + summary.hiddenItems() + " more: §6" + NumberFormats.compact(summary.hiddenValue())));
 		}
 
-		addTotals(result, summary.pestsKilled(), summary.npcCoins(), summary.totalProfit(), summary.profitPerHour(), summary.uptimeMillis(), paused);
+		addStats(result, stats, summary, paused, logic.farmingXpIsPercentage());
 		return result;
 	}
 
@@ -266,17 +282,44 @@ public final class FarmingProfitTracker {
 		return HudLine.row("§f" + NumberFormats.grouped(count) + "x", "§" + rarityColor + name, "§6" + NumberFormats.compact(value)).withIcon(icon);
 	}
 
-	private static void addTotals(List<HudLine> result, long pestsKilled, double npcCoins, double totalProfit, double profitPerHour, long uptimeMillis,
-			boolean paused) {
-		result.add(HudLine.of("§fPests killed: §e" + NumberFormats.grouped(pestsKilled)));
-		result.add(HudLine.of("§fSold to NPC: §6" + NumberFormats.grouped(npcCoins) + " coins"));
-		result.add(HudLine.of("§fTotal Profit: §6" + NumberFormats.grouped(totalProfit) + " coins"));
-		result.add(HudLine.of("§fProfit Per Hour: §6" + NumberFormats.grouped(profitPerHour) + " coins"));
-		result.add(HudLine.of("§fTotal Uptime: §e" + NumberFormats.duration(uptimeMillis) + (paused ? " §c(Paused)" : "")));
+	/**
+	 * @param xpIsPercentage whether the action bar has the Farming XP in a way that cannot be counted
+	 */
+	private void addStats(List<HudLine> result, List<FarmingProfitStat> stats, FarmingTrackerLogic.Summary summary, boolean paused, boolean xpIsPercentage) {
+		for (FarmingProfitStat stat : stats) {
+			String value = switch (stat) {
+				case TOTAL_PROFIT -> coins(summary.totalProfit());
+				case PROFIT_PER_HOUR -> coins(summary.profitPerHour());
+				case UPTIME -> "§e" + NumberFormats.duration(summary.uptimeMillis()) + (paused ? " §c(Paused)" : "");
+				case PESTS_KILLED -> "§e" + NumberFormats.grouped(summary.pestsKilled());
+				case NPC_COINS -> coins(summary.npcCoins());
+				case FARMING_XP -> xpIsPercentage ? XP_MISSING : "§e" + NumberFormats.grouped(summary.farmingXp());
+				case FARMING_XP_PER_HOUR -> xpIsPercentage ? XP_MISSING : "§e" + NumberFormats.grouped(summary.farmingXpPerHour());
+			};
+
+			result.add(HudLine.of("§f" + stat + ": " + value).withIcon(icon(stat)));
+		}
+	}
+
+	private static String coins(double coins) {
+		return "§6" + NumberFormats.grouped(coins) + " coins";
+	}
+
+	private ItemStack icon(FarmingProfitStat stat) {
+		Item item = switch (stat) {
+			case TOTAL_PROFIT -> Items.GOLD_BLOCK;
+			case PROFIT_PER_HOUR -> Items.GOLD_INGOT;
+			case UPTIME -> Items.CLOCK;
+			case PESTS_KILLED -> Items.SPIDER_EYE;
+			case NPC_COINS -> Items.EMERALD;
+			case FARMING_XP, FARMING_XP_PER_HOUR -> Items.EXPERIENCE_BOTTLE;
+		};
+
+		return icons.computeIfAbsent(item, ItemIcons::of);
 	}
 
 	/** Made-up numbers, so the GUI editor shows the tracker at a realistic size before anything was farmed. */
-	private static List<HudLine> buildExampleLines() {
+	private List<HudLine> buildExampleLines(List<FarmingProfitStat> stats) {
 		List<HudLine> result = new ArrayList<>();
 		result.add(itemRow(ItemIcons.glowing(Items.COCOA_BEANS), 76_549, 'a', "Ench Cocoa Beans", 36_743_520));
 		result.add(itemRow(ItemIcons.glowing(Items.MELON_SLICE), 105_061, 'a', "Ench Melon Slice", 33_619_520));
@@ -284,7 +327,8 @@ public final class FarmingProfitTracker {
 		result.add(itemRow(ItemIcons.glowing(Items.CARROT), 59_783, 'a', "Ench Carrot", 28_695_840));
 		result.add(itemRow(ItemIcons.glowing(Items.POTATO), 61_769, 'a', "Ench Potato", 29_649_120));
 		result.add(itemRow(ItemIcons.of(Items.PAPER), 84, '6', "Overclocker 3000", 21_000_000));
-		addTotals(result, 4_383, 52_480_000, 186_597_600, 14_083_123, 47_700_000, false);
+		addStats(result, stats, new FarmingTrackerLogic.Summary(List.of(), 0, 0, 186_597_600, 14_083_123, 4_383, 52_480_000, 164_000, 21_465_000, 1_620_000,
+				47_700_000), false, false);
 		return result;
 	}
 
@@ -313,7 +357,7 @@ public final class FarmingProfitTracker {
 			long now = System.currentTimeMillis();
 			FarmingCategory.ProfitTracker settings = config.get();
 			// A changed setting should show right away, not seconds later.
-			boolean settingsChanged = settings.priceSource != linesPriceSource || settings.itemsShown != linesItemsShown;
+			boolean settingsChanged = settings.priceSource != linesPriceSource || settings.itemsShown != linesItemsShown || !settings.stats.equals(linesStats);
 			// So should pausing, and above all that the tracker runs again once farming goes on.
 			boolean paused = logic.isPaused(now);
 
@@ -321,8 +365,9 @@ public final class FarmingProfitTracker {
 				linesBuiltAt = now;
 				linesPriceSource = settings.priceSource;
 				linesItemsShown = settings.itemsShown;
+				linesStats = List.copyOf(settings.stats);
 				linesPaused = paused;
-				lines = buildLines(paused);
+				lines = buildLines(linesStats, paused);
 			}
 
 			return lines;
@@ -334,9 +379,12 @@ public final class FarmingProfitTracker {
 				return lines();
 			}
 
+			List<FarmingProfitStat> stats = config.get().stats;
+
 			// The editor asks for these on every frame.
-			if (exampleLines == null) {
-				exampleLines = buildExampleLines();
+			if (exampleLines == null || !stats.equals(exampleStats)) {
+				exampleStats = List.copyOf(stats);
+				exampleLines = buildExampleLines(exampleStats);
 			}
 
 			return exampleLines;

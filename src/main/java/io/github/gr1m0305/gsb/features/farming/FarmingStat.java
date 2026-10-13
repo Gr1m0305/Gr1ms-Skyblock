@@ -10,6 +10,7 @@ public enum FarmingStat {
 	CROP_FORTUNE("Crop Fortune"),
 	SPEED("Speed"),
 	BONUS_PEST_CHANCE("Bonus Pest Chance"),
+	OVERBLOOM("Overbloom"),
 	FARMING_WISDOM("Farming Wisdom"),
 	PEST_COOLDOWN("Pest Cooldown"),
 	YAW("Yaw"),

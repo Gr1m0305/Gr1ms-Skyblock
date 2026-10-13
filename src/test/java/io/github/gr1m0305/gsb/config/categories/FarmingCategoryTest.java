@@ -8,6 +8,7 @@ import java.util.List;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import io.github.gr1m0305.gsb.features.farming.FarmingProfitStat;
 import io.github.gr1m0305.gsb.features.farming.FarmingStat;
 import org.junit.jupiter.api.Test;
 
@@ -50,6 +51,37 @@ class FarmingCategoryTest {
 		assertTrue(json.contains("\"statTracker\""), json);
 		assertFalse(json.contains("fortuneDisplay"), json);
 		assertEquals(List.of(FarmingStat.PITCH, FarmingStat.CROP_FORTUNE), load(json).statTracker.stats);
+	}
+
+	@Test
+	void theProfitTrackerStartsWithoutPestsNpcSalesAndFarmingXp() {
+		// Also what a config file from before the stats could be picked gets.
+		FarmingCategory farming = load("{\"profitTracker\":{\"enabled\":true,\"itemsShown\":12}}");
+		assertEquals(List.of(FarmingProfitStat.TOTAL_PROFIT, FarmingProfitStat.PROFIT_PER_HOUR, FarmingProfitStat.UPTIME), farming.profitTracker.stats);
+		assertEquals(12, farming.profitTracker.itemsShown);
+	}
+
+	@Test
+	void savesAndLoadsThePickedStatsOfTheProfitTracker() {
+		FarmingCategory farming = new FarmingCategory();
+		farming.profitTracker.stats.addAll(List.of(FarmingProfitStat.PESTS_KILLED, FarmingProfitStat.FARMING_XP_PER_HOUR));
+
+		assertEquals(List.of(FarmingProfitStat.TOTAL_PROFIT, FarmingProfitStat.PROFIT_PER_HOUR, FarmingProfitStat.UPTIME, FarmingProfitStat.PESTS_KILLED,
+				FarmingProfitStat.FARMING_XP_PER_HOUR), load(GSON.toJson(farming)).profitTracker.stats);
+	}
+
+	@Test
+	void repairsAStatListOfTheProfitTrackerEditedByHand() {
+		FarmingCategory farming = load("""
+				{"profitTracker":{"stats":["NPC_COINS","NOT_A_STAT","FARMING_XP","NPC_COINS"]}}""");
+		assertEquals(List.of(FarmingProfitStat.NPC_COINS, FarmingProfitStat.FARMING_XP), farming.profitTracker.stats);
+
+		// The config menu adds to this list.
+		farming.profitTracker.stats.add(FarmingProfitStat.UPTIME);
+
+		assertEquals(FarmingProfitStat.DEFAULTS, load("{\"profitTracker\":{\"stats\":null}}").profitTracker.stats);
+		// Picking nothing at all is allowed, the items are still listed.
+		assertTrue(load("{\"profitTracker\":{\"stats\":[]}}").profitTracker.stats.isEmpty());
 	}
 
 	@Test

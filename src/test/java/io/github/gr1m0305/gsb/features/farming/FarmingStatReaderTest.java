@@ -20,6 +20,7 @@ class FarmingStatReaderTest {
 			" Farming Fortune: ☘1203",
 			" Wheat Fortune: ☘521",
 			" Bonus Pest Chance: ൠ190%",
+			" Overbloom: 25",
 			" Farming Wisdom: ☯48.5"));
 
 	@Test
@@ -29,6 +30,8 @@ class FarmingStatReaderTest {
 		assertEquals(Optional.of("☘521"), GARDEN.value(FarmingStat.CROP_FORTUNE));
 		assertEquals(Optional.of("✦400"), GARDEN.value(FarmingStat.SPEED));
 		assertEquals(Optional.of("ൠ190%"), GARDEN.value(FarmingStat.BONUS_PEST_CHANCE));
+		// The symbol of Overbloom is a character of Hypixel's resource pack.
+		assertEquals(Optional.of("25"), GARDEN.value(FarmingStat.OVERBLOOM));
 		assertEquals(Optional.of("☯48.5"), GARDEN.value(FarmingStat.FARMING_WISDOM));
 		assertEquals(Optional.of("1m 58s"), GARDEN.value(FarmingStat.PEST_COOLDOWN));
 	}
@@ -52,6 +55,7 @@ class FarmingStatReaderTest {
 		assertEquals("Crop Fortune", reader.label(FarmingStat.CROP_FORTUNE));
 		assertTrue(reader.value(FarmingStat.SPEED).isEmpty());
 		assertTrue(reader.value(FarmingStat.BONUS_PEST_CHANCE).isEmpty());
+		assertTrue(reader.value(FarmingStat.OVERBLOOM).isEmpty());
 		assertEquals(Optional.of("READY"), reader.value(FarmingStat.PEST_COOLDOWN));
 
 		for (FarmingStat stat : FarmingStat.values()) {

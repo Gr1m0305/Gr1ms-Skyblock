@@ -17,6 +17,7 @@ import io.github.gr1m0305.gsb.config.categories.FarmingCategory;
 import io.github.gr1m0305.gsb.config.categories.GeneralCategory;
 import io.github.gr1m0305.gsb.data.ItemInfo;
 import io.github.gr1m0305.gsb.data.LegacyMaterials;
+import io.github.gr1m0305.gsb.features.farming.FarmingProfitStat;
 import io.github.gr1m0305.gsb.features.farming.FarmingStat;
 import io.github.gr1m0305.gsb.gui.HudElement;
 import io.github.gr1m0305.gsb.gui.HudLine;
@@ -83,7 +84,7 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			check(!SkyblockState.onSkyblock() && !pet().isVisible(), "the pet display is not shown away from SkyBlock");
 
 			PlayerInfo areaLine = context.computeOnClient(minecraft ->
-					addTabLines(minecraft, "Area: Garden", "Stats:", " Speed: ✦400", " Farming Fortune: ☘1203", " Wheat Fortune: ☘521").getFirst());
+					addTabLines(minecraft, "Area: Garden", "Stats:", " Speed: ✦400", " Farming Fortune: ☘1203", " Wheat Fortune: ☘521", " Overbloom: 25").getFirst());
 			// Hypixel colours the name of a pet by its rarity, gold is legendary.
 			List<PlayerInfo> petLines = context.computeOnClient(minecraft -> addTabLines(minecraft, Component.literal("Pet:"),
 					Component.literal(" ").append(Component.literal("[Lvl 87] ").withStyle(ChatFormatting.GRAY)).append(Component.literal("Mooshroom Cow").withStyle(ChatFormatting.GOLD)),
@@ -138,10 +139,10 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			List<FarmingStat> picked = GrimsSkyblock.get().config().get().farming.statTracker.stats;
 			context.runOnClient(minecraft -> {
 				picked.clear();
-				picked.addAll(List.of(FarmingStat.PITCH, FarmingStat.CROP_FORTUNE, FarmingStat.FARMING_FORTUNE, FarmingStat.BONUS_PEST_CHANCE));
+				picked.addAll(List.of(FarmingStat.PITCH, FarmingStat.CROP_FORTUNE, FarmingStat.FARMING_FORTUNE, FarmingStat.BONUS_PEST_CHANCE, FarmingStat.OVERBLOOM));
 			});
 			List<String> pickedStats = statLines(context);
-			check(pickedStats.equals(List.of("Pitch: 3.30", "Wheat Fortune: ☘521", "Farming Fortune: ☘1,203", "Bonus Pest Chance: not in tab list")),
+			check(pickedStats.equals(List.of("Pitch: 3.30", "Wheat Fortune: ☘521", "Farming Fortune: ☘1,203", "Bonus Pest Chance: not in tab list", "Overbloom: 25")),
 					"picked stats were " + pickedStats);
 			context.runOnClient(minecraft -> picked.clear());
 			check(lines(context, stats()).equals(List.of("No stats picked, add some in /gsb")), "without stats: " + lines(context, stats()));
@@ -172,20 +173,50 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			sendChat(context, Component.literal("Moved 3 Enchanted Hay Bale from your Sacks to your inventory."));
 			world.getServer().runCommand("give @a minecraft:hay_block[minecraft:custom_data={id:\"ENCHANTED_HAY_BALE\"}] 3");
 			context.waitTicks(10);
+			// Farming XP is in the action bar, which names one gain and comes less often than XP is gained.
+			sendActionBar(context, "§c2,480/2,480❤     §3+6.5 Farming (1,234.5/5,000)     §b1,204/1,204✎ Mana");
+			sendActionBar(context, "§c2,480/2,480❤     §3+6.5 Farming (1,300/5,000)     §b1,204/1,204✎ Mana");
+			sendActionBar(context, "§c2,480/2,480❤     §a600§a❈ Defense     §b1,204/1,204✎ Mana");
 
 			// The tracker only rebuilds its text every three seconds, so wait for it to pick all of that up.
 			List<HudLine> shown = waitForTrackerRefresh(context);
 			List<String> trackerLines = lines(context, tracker());
 			System.out.println("[GSB test] tracker lines: " + trackerLines);
-			check(context.computeOnClient(minecraft -> tracker().lines().stream().allMatch(line -> line.isRow() == (line.icon() != null))),
-					"the items of the tracker have icons, its totals do not");
+			check(context.computeOnClient(minecraft -> tracker().lines().stream().allMatch(line -> line.icon() != null)),
+					"the items and the stats of the tracker have icons");
+			// Below the items are the stats picked in the config, which are not all of them at first.
+			List<String> defaultProfitStats = trackerLines.stream().filter(line -> !line.contains("|")).map(line -> line.substring(0, line.indexOf(':'))).toList();
+			check(defaultProfitStats.equals(List.of("Total Profit", "Profit Per Hour", "Total Uptime")), "the default stats of the tracker were " + defaultProfitStats);
 			check(trackerLines.stream().anyMatch(line -> line.startsWith("1,234x|") && line.contains("Wheat")), "wheat from the sack message");
 			check(trackerLines.stream().anyMatch(line -> line.startsWith("32x|") && line.contains("Melon")), "12 melon from sacks plus 20 from the inventory");
 			check(trackerLines.stream().anyMatch(line -> line.startsWith("1x|") && line.contains("Overclocker")), "overclocker from the inventory");
 			check(trackerLines.stream().noneMatch(line -> line.contains("Hay")), "items taken out of the sacks are not counted");
 			check(trackerLines.stream().noneMatch(line -> line.contains("Seeds")), "items removed from the sacks are not counted");
-			check(trackerLines.contains("Pests killed: 1"), "pest kill");
-			check(trackerLines.contains("Sold to NPC: 20,480 coins"), "npc sale");
+
+			// The others were counted all along and show up as soon as they are picked.
+			List<FarmingProfitStat> profitStats = GrimsSkyblock.get().config().get().farming.profitTracker.stats;
+			context.runOnClient(minecraft -> {
+				profitStats.clear();
+				profitStats.addAll(List.of(FarmingProfitStat.values()));
+			});
+			List<String> allProfitStats = lines(context, tracker());
+			System.out.println("[GSB test] tracker lines with all stats: " + allProfitStats);
+			check(allProfitStats.contains("Pests Killed: 1"), "pest kill");
+			check(allProfitStats.contains("Sold to NPC: 20,480 coins"), "npc sale");
+			check(allProfitStats.contains("Farming XP: 72"), "6.5 XP of the first gain and 65.5 the level went up by since");
+			check(allProfitStats.stream().anyMatch(line -> line.startsWith("Farming XP Per Hour: ")), "farming xp per hour");
+			check(context.computeOnClient(minecraft -> tracker().lines().stream().allMatch(line -> line.icon() != null)), "every stat of the tracker has an icon");
+			context.waitTicks(5);
+			context.takeScreenshot("1-hud-all-profit-stats");
+			// A percentage of a level cannot be counted, and the tracker says so.
+			sendActionBar(context, "§c2,480/2,480❤     §3+6.5 Farming (26.13%)     §b1,204/1,204✎ Mana");
+			waitForTrackerRefresh(context);
+			check(lines(context, tracker()).contains("Farming XP: not in action bar"), "farming xp as a percentage: " + lines(context, tracker()));
+			sendActionBar(context, "§c2,480/2,480❤     §3+6.5 Farming (1,313/5,000)     §b1,204/1,204✎ Mana");
+			context.runOnClient(minecraft -> {
+				profitStats.clear();
+				profitStats.addAll(FarmingProfitStat.DEFAULTS);
+			});
 
 			// Crops in the sacks that get compacted turn into what they became, they are not counted on top of it.
 			sendChat(context, Component.literal("[Sacks] ")
@@ -324,6 +355,11 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			context.waitTicks(20);
 			context.takeScreenshot("4-config-stat-tracker");
 
+			// The stats of the profit tracker are picked from a list like it.
+			context.runOnClient(minecraft -> showOption(FarmingCategory.ProfitTracker.class, "stats"));
+			context.waitTicks(20);
+			context.takeScreenshot("4-config-profit-tracker");
+
 			context.runOnClient(minecraft -> showOption("buffTracker"));
 			context.waitTicks(20);
 			context.takeScreenshot("4-config-buff-tracker");
@@ -421,8 +457,11 @@ public class GsbClientGameTest implements FabricClientGameTest {
 			context.runOnClient(minecraft -> minecraft.getConnection().sendCommand("gsb resetfarming"));
 			context.waitTicks(10);
 			List<String> afterReset = lines(context, tracker());
-			check(afterReset.contains("Nothing farmed yet") && afterReset.contains("Pests killed: 0") && afterReset.contains("Sold to NPC: 0 coins"),
-					"tracker after reset: " + afterReset);
+			check(afterReset.contains("Nothing farmed yet") && afterReset.contains("Total Profit: 0 coins"), "tracker after reset: " + afterReset);
+			context.runOnClient(minecraft -> profitStats.addAll(List.of(FarmingProfitStat.PESTS_KILLED, FarmingProfitStat.NPC_COINS, FarmingProfitStat.FARMING_XP)));
+			List<String> allAfterReset = lines(context, tracker());
+			check(allAfterReset.contains("Pests Killed: 0") && allAfterReset.contains("Sold to NPC: 0 coins") && allAfterReset.contains("Farming XP: 0"),
+					"all of the tracker after reset: " + allAfterReset);
 			context.takeScreenshot("6-after-reset");
 
 			// Away from the Garden the farming elements go, the pet display stays.
@@ -546,6 +585,11 @@ public class GsbClientGameTest implements FabricClientGameTest {
 
 	private static void sendChat(ClientGameTestContext context, Component message) {
 		context.runOnClient(minecraft -> minecraft.getConnection().handleSystemChat(new ClientboundSystemChatPacket(message, false)));
+	}
+
+	/** Hypixel writes its action bar with formatting codes. */
+	private static void sendActionBar(ClientGameTestContext context, String text) {
+		context.runOnClient(minecraft -> minecraft.getConnection().handleSystemChat(new ClientboundSystemChatPacket(Component.literal(text), true)));
 	}
 
 	private static List<PlayerInfo> addTabLines(Minecraft minecraft, String... lines) {

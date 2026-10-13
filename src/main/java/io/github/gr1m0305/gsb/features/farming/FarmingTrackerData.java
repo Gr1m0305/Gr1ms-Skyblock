@@ -10,5 +10,6 @@ public class FarmingTrackerData {
 	public long pestsKilled;
 	public double npcCoins;
 	public long npcItemsSold;
+	public double farmingXp;
 	public long uptimeMillis;
 }

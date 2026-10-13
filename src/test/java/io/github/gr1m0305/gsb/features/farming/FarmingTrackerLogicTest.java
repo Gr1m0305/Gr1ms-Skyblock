@@ -243,11 +243,74 @@ class FarmingTrackerLogicTest {
 		assertEquals(0, summary.totalProfit());
 	}
 
+	private static FarmingChatParser.FarmingXp xp(double gained, double current, String needed) {
+		return new FarmingChatParser.FarmingXp(gained, current, needed);
+	}
+
+	@Test
+	void countsFarmingXpByHowFarTheLevelWentUp() {
+		// Nothing to compare the first one with, so it is the one gain it names.
+		logic.farmingXpShown(xp(6.5, 1_234.5, "5,000"));
+		assertEquals(6.5, summary(10).farmingXp());
+
+		// Ten gains were made since, the action bar names the last of them.
+		logic.farmingXpShown(xp(6.5, 1_299.5, "5,000"));
+		assertEquals(71.5, summary(10).farmingXp());
+
+		// The action bar is sent again while nothing changed.
+		logic.farmingXpShown(xp(6.5, 1_299.5, "5,000"));
+		assertEquals(71.5, summary(10).farmingXp());
+		assertTrue(logic.takeDirty());
+	}
+
+	@Test
+	void aLevelUpStartsTheFarmingXpAnew() {
+		logic.farmingXpShown(xp(10, 4_990, "5,000"));
+		// The next level takes more XP and starts at zero.
+		logic.farmingXpShown(xp(10, 5, "7,500"));
+		assertEquals(20, summary(10).farmingXp());
+		logic.farmingXpShown(xp(10, 45, "7,500"));
+		assertEquals(60, summary(10).farmingXp());
+	}
+
+	@Test
+	void farmingXpGainedOutOfSightIsNotCounted() {
+		logic.farmingXpShown(xp(207.2, 5_183_244, "0"));
+		logic.farmingXpOutOfSight();
+		// Farmed somewhere else in between.
+		logic.farmingXpShown(xp(207.2, 5_983_244, "0"));
+		assertEquals(414.4, summary(10).farmingXp());
+	}
+
+	@Test
+	void farmingXpShownAsAPercentageIsNotCounted() {
+		assertFalse(logic.farmingXpIsPercentage());
+		logic.farmingXpShown(xp(1.1, -1, ""));
+		logic.farmingXpShown(xp(1.1, -1, ""));
+		assertEquals(0, summary(10).farmingXp());
+		assertTrue(logic.farmingXpIsPercentage());
+
+		// Numbers after a percentage have nothing to be compared with.
+		logic.farmingXpShown(xp(1.1, 300, "750"));
+		assertEquals(1.1, summary(10).farmingXp());
+		assertFalse(logic.farmingXpIsPercentage());
+	}
+
+	@Test
+	void farmingXpPerHourUsesTheUptime() {
+		logic.farmingXpShown(xp(50, 1_000, "0"));
+		logic.farmingXpShown(xp(50, 800_950, "0"));
+		logic.data().uptimeMillis = 30 * 60 * 1000;
+		assertEquals(800_000, summary(10).farmingXp());
+		assertEquals(1_600_000, summary(10).farmingXpPerHour());
+	}
+
 	@Test
 	void resetClearsEverything() {
 		logic.inventoryChanged("CROPIE", 4, 1_000);
 		logic.pestKilled(1_000);
 		logic.soldToNpc(100, 1);
+		logic.farmingXpShown(xp(6.5, 24, "750"));
 		logic.tick(1_000, 50, true);
 		assertTrue(logic.takeDirty());
 
@@ -256,6 +319,7 @@ class FarmingTrackerLogicTest {
 		assertTrue(summary.rows().isEmpty());
 		assertEquals(0, summary.pestsKilled());
 		assertEquals(0, summary.npcCoins());
+		assertEquals(0, summary.farmingXp());
 		assertEquals(0, summary.uptimeMillis());
 		assertTrue(logic.takeDirty());
 		assertFalse(logic.takeDirty());

@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.ToDoubleFunction;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * The bookkeeping of the Farming Profit Tracker, kept free of Minecraft classes.
  *
@@ -35,7 +37,7 @@ public final class FarmingTrackerLogic {
 	 * @param hiddenItems how many more items there are that did not fit into {@code rows}
 	 */
 	public record Summary(List<ItemRow> rows, int hiddenItems, double hiddenValue, double totalProfit, double profitPerHour,
-			long pestsKilled, double npcCoins, long npcItemsSold, long uptimeMillis) {
+			long pestsKilled, double npcCoins, long npcItemsSold, double farmingXp, double farmingXpPerHour, long uptimeMillis) {
 	}
 
 	private static final class RecentGain {
@@ -54,6 +56,7 @@ public final class FarmingTrackerLogic {
 	private final ExpiringCounts takenOutOfSacks = new ExpiringCounts(SACK_MESSAGE_DELAY_MILLIS);
 	private final ExpiringCounts withdrawnFromSacks = new ExpiringCounts(SACK_WITHDRAWAL_WINDOW_MILLIS);
 	private final ArrayDeque<RecentGain> recentInventoryGains = new ArrayDeque<>();
+	private FarmingChatParser.@Nullable FarmingXp lastXpShown;
 	private FarmingTrackerData data;
 	private long lastActivity = Long.MIN_VALUE / 2;
 	private long lastGain = Long.MIN_VALUE / 2;
@@ -174,6 +177,38 @@ public final class FarmingTrackerLogic {
 		dirty = true;
 	}
 
+	/** The action bar showed the Farming XP of the player, which it does for a moment whenever some is gained. */
+	public void farmingXpShown(FarmingChatParser.FarmingXp shown) {
+		FarmingChatParser.FarmingXp last = lastXpShown;
+		lastXpShown = shown;
+
+		// A percentage of a level does not say how much XP that is.
+		if (!shown.hasNumbers()) {
+			return;
+		}
+
+		// The action bar names a single gain and is not sent for every one of them, so what counts is how far the
+		// XP of the level went up. Only where there is nothing to compare with, at first and after a level-up, it
+		// is that one gain.
+		boolean sameLevel = last != null && last.hasNumbers() && last.needed().equals(shown.needed()) && shown.current() >= last.current();
+		double gained = sameLevel ? shown.current() - last.current() : shown.gained();
+
+		if (gained > 0) {
+			data.farmingXp += gained;
+			dirty = true;
+		}
+	}
+
+	/** The tracker stopped watching. XP gained from here on is not counted, the next one shown starts anew. */
+	public void farmingXpOutOfSight() {
+		lastXpShown = null;
+	}
+
+	/** Whether the action bar has the Farming XP as a percentage only, which cannot be counted. */
+	public boolean farmingXpIsPercentage() {
+		return lastXpShown != null && !lastXpShown.hasNumbers();
+	}
+
 	/**
 	 * Advances the uptime.
 	 *
@@ -230,8 +265,9 @@ public final class FarmingTrackerLogic {
 
 		double hours = data.uptimeMillis / 3_600_000.0;
 		double profitPerHour = data.uptimeMillis >= 1000 ? totalProfit / hours : 0;
+		double farmingXpPerHour = data.uptimeMillis >= 1000 ? data.farmingXp / hours : 0;
 		return new Summary(List.copyOf(rows.subList(0, shown)), rows.size() - shown, hiddenValue, totalProfit, profitPerHour,
-				data.pestsKilled, data.npcCoins, data.npcItemsSold, data.uptimeMillis);
+				data.pestsKilled, data.npcCoins, data.npcItemsSold, data.farmingXp, farmingXpPerHour, data.uptimeMillis);
 	}
 
 	private void addItem(String id, long delta) {

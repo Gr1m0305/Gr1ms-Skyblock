@@ -112,14 +112,22 @@ public class GrimsSkyblock implements ClientModInitializer {
 		screenToOpen = screen;
 	}
 
-	/** Called by the mixin for every chat message the server sends. */
-	public static void onSystemChat(Component message) {
+	/**
+	 * Called by the mixin for every chat message the server sends.
+	 *
+	 * @param actionBar whether the message is shown above the hotbar instead of in the chat
+	 */
+	public static void onSystemChat(Component message, boolean actionBar) {
 		if (instance == null || instance.farmingTracker == null) {
 			return;
 		}
 
 		try {
-			instance.farmingTracker.onChat(message);
+			if (actionBar) {
+				instance.farmingTracker.onActionBar(message);
+			} else {
+				instance.farmingTracker.onChat(message);
+			}
 		} catch (RuntimeException e) {
 			// A message we fail to understand must never break the chat.
 			LOGGER.error("Could not handle chat message", e);

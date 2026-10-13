@@ -153,6 +153,8 @@ public final class FarmingStatTracker extends HudElement {
 			case CROP_FORTUNE -> "☘521";
 			case SPEED -> "✦400";
 			case BONUS_PEST_CHANCE -> "ൠ190%";
+			// Without its symbol, which is a character only the resource pack of Hypixel has.
+			case OVERBLOOM -> "25";
 			case FARMING_WISDOM -> "☯48";
 			case PEST_COOLDOWN -> "1m 58s";
 			case YAW, PITCH -> throw new IllegalArgumentException(stat + " is not read from the tab list");
@@ -166,6 +168,8 @@ public final class FarmingStatTracker extends HudElement {
 			case CROP_FORTUNE -> cropItem(reader.crop());
 			case SPEED -> Items.SUGAR;
 			case BONUS_PEST_CHANCE -> Items.SPIDER_EYE;
+			// The game draws the stat with it too.
+			case OVERBLOOM -> Items.CACTUS_FLOWER;
 			case FARMING_WISDOM -> Items.EXPERIENCE_BOTTLE;
 			case PEST_COOLDOWN -> Items.CLOCK;
 			case YAW -> Items.COMPASS;

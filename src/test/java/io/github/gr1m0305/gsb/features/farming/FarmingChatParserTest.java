@@ -96,6 +96,31 @@ class FarmingChatParserTest {
 	}
 
 	@Test
+	void readsTheFarmingXpOfTheActionBar() {
+		String raw = "§c2,480/2,480❤     §3+6.3 Farming (1,234.5/5,000)     §b1,204/1,204✎ Mana";
+		assertEquals(new FarmingChatParser.FarmingXp(6.3, 1_234.5, "5,000"), FarmingChatParser.parseFarmingXp(StringUtil.stripFormatting(raw)).orElseThrow());
+
+		// At the highest level it is all the XP of the skill, with no next level to count towards.
+		assertEquals(new FarmingChatParser.FarmingXp(207.2, 5_183_244, "0"), FarmingChatParser.parseFarmingXp("+207.2 Farming (5,183,244/0)").orElseThrow());
+		assertEquals(new FarmingChatParser.FarmingXp(12, 24, "7.5k"), FarmingChatParser.parseFarmingXp("+12 Farming (24/7.5k)").orElseThrow());
+		assertTrue(FarmingChatParser.parseFarmingXp("+6.3 Farming (24/750)").orElseThrow().hasNumbers());
+	}
+
+	@Test
+	void aPercentageOfFarmingXpHasNoNumbers() {
+		FarmingChatParser.FarmingXp xp = FarmingChatParser.parseFarmingXp("+1.1 Farming (48.39%)").orElseThrow();
+		assertEquals(1.1, xp.gained());
+		assertFalse(xp.hasNumbers());
+	}
+
+	@Test
+	void onlyFarmingXpIsRead() {
+		assertTrue(FarmingChatParser.parseFarmingXp("2,480/2,480❤     600❈ Defense     1,204/1,204✎ Mana").isEmpty());
+		assertTrue(FarmingChatParser.parseFarmingXp("+6.3 Foraging (24/750)").isEmpty());
+		assertTrue(FarmingChatParser.parseFarmingXp("+6.3 Farming").isEmpty());
+	}
+
+	@Test
 	void readsRemovedItemsAsNegative() {
 		String hover = "Removed items:\n  -2,000 Enchanted Potato (Enchanted Agronomy Sack)\n  + 2 other items";
 		assertEquals(List.of(new FarmingChatParser.SackChange("Enchanted Potato", -2_000)), FarmingChatParser.parseSackHover(hover));
